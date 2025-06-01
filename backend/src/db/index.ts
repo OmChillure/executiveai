@@ -1,8 +1,11 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
+import dotenv from 'dotenv';
+dotenv.config();
 
-const DATABASE_URL = 'postgresql://postgres.bcfgzoapdrpycgpmrkou:gp4zOlSgzpERFZ5s@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres'
+
+const DATABASE_URL = process.env.SUPABASE_DATABASE_URL;
 
 const globalForDb = globalThis as unknown as {
   conn: postgres.Sql | undefined;
