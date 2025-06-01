@@ -9,11 +9,10 @@ import * as aiModelService from '../services/ai-model.service';
 import { db } from '../db';
 import { eq } from 'drizzle-orm';
 
-// --- Levenshtein Distance Utility ---
 function calculateLevenshteinDistance(a: string, b: string): number {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
-  a = a.toLowerCase(); // Make comparison case-insensitive for similarity
+  a = a.toLowerCase();
   b = b.toLowerCase();
 
   const matrix = Array(a.length + 1).fill(null).map(() => Array(b.length + 1).fill(null));
@@ -47,25 +46,24 @@ function calculateStringSimilarity(s1: string, s2: string): number {
   return (longerLength - calculateLevenshteinDistance(longer, shorter)) / longerLength;
 }
 
-// --- Interfaces and Enums ---
+
 export interface ResolvedTargetItem {
   id: string;
   name: string;
-  originalName?: string; // For undoing renames
-  originalParentIds?: string[]; // For undoing moves
+  originalName?: string; 
+  originalParentIds?: string[];
   type: 'file' | 'folder';
-  userInput?: string; // What the user typed that led to this item
+  userInput?: string; 
   isSuggestion?: boolean;
-  similarity?: number; // Store similarity score if fuzzy matched
+  similarity?: number;
 }
 
-// Used for preModificationDetails for batch operations, simpler than ResolvedTargetItem
 export interface BatchItemDetail {
   id: string;
   name: string;
-  originalName: string; // In batch context, often same as name
+  originalName: string; 
   originalParentIds?: string[];
-  mimeType?: string | null; // Useful for batch display/undo logic
+  mimeType?: string | null; 
 }
 
 export interface ParsedDriveCommand {
@@ -73,8 +71,7 @@ export interface ParsedDriveCommand {
   parameters: any;
   confirmationRequired?: boolean;
   userInput?: string;
-  resolvedTargetItems?: ResolvedTargetItem[]; // For single item resolution
-  // Store pre-modification state for undo. For batch ops, this holds the list of items.
+  resolvedTargetItems?: ResolvedTargetItem[];
   preModificationDetails?: (Pick<ResolvedTargetItem, 'id' | 'name' | 'originalName' | 'originalParentIds'> | BatchItemDetail)[];
 }
 
@@ -119,22 +116,16 @@ export interface UserCredentials {
   expiresAt: Date;
 }
 
-// --- Constants ---
 const SCOPES: string[] = ['https://www.googleapis.com/auth/drive'];
 const TOKEN_DIR: string = path.join(os.homedir(), '.credentials');
 const FUZZY_SIMILARITY_THRESHOLD = 0.75;
 const EAGER_REFRESH_THRESHOLD_MS: number = 5 * 60 * 1000;
 
-// In-memory storage for user OAuth sessions
-// In production, consider storing this in a database
 const userCredentialsStore: Map<string, UserCredentials> = new Map();
 
-// In-memory command history for each user
-// In production, consider storing this in a database
 const userCommandHistory: Map<string, Array<{ command: ParsedDriveCommand; response: any; timestamp: Date }>> = new Map();
 const MAX_HISTORY_SIZE = 10;
 
-// --- GoogleDriveAgent Class ---
 class GoogleDriveAgent {
   private drive: drive_v3.Drive | null = null;
   private oauth2Client: OAuth2Client | null = null;
@@ -159,13 +150,11 @@ class GoogleDriveAgent {
         this.clientSecret,
         this.redirectUri
       );
-      
-      // Check if we have tokens for this user
+
       const userCreds = userCredentialsStore.get(this.userId);
       if (userCreds) {
         this.oauth2Client.setCredentials(userCreds.tokens);
         
-        // Check if token is expired or about to expire
         if (userCreds.expiresAt.getTime() <= (Date.now() + EAGER_REFRESH_THRESHOLD_MS)) {
           try {
             const { credentials: newCredentials } = await this.oauth2Client.refreshAccessToken();
@@ -175,7 +164,6 @@ class GoogleDriveAgent {
           } catch (refreshError) {
             this.handleError(refreshError, 'Token Refresh');
             this.log('Failed to refresh token. Authorization needed.');
-            // Return auth URL if refresh failed
             return this.getAuthUrl();
           }
         }
@@ -188,7 +176,6 @@ class GoogleDriveAgent {
         this.initialized = true;
         return null; // No auth needed
       } else {
-        // No tokens for this user, need authorization
         return this.getAuthUrl();
       }
     } catch (error) {
@@ -202,7 +189,6 @@ class GoogleDriveAgent {
       access_type: 'offline',
       scope: SCOPES,
       prompt: 'consent',
-      // Include user ID as state to identify in the callback
       state: this.userId
     });
   }
@@ -227,7 +213,6 @@ class GoogleDriveAgent {
     if (tokens.expiry_date) {
       expiryDate.setTime(tokens.expiry_date);
     } else {
-      // Default expiry if not provided (1 hour from now)
       expiryDate.setTime(Date.now() + 3600 * 1000);
     }
 
@@ -249,7 +234,6 @@ class GoogleDriveAgent {
     const history = this.getUserCommandHistory();
     history.push({ command, response, timestamp: new Date() });
     
-    // Keep history size limited
     if (history.length > MAX_HISTORY_SIZE) {
       history.shift();
     }
@@ -442,9 +426,6 @@ Output JSON (ONLY the JSON object, no other text or markdown formatting like \`\
 
     this.log(`Executing action: ${parsedCommand.action} with params: ${JSON.stringify(parsedCommand.parameters)} (Confirmed: ${confirmed})`);
     
-    // For simplicity, we'll just implement a few common actions
-    // In a complete implementation, you would implement all the actions from the DriveAction enum
-    
     let result: DriveResult;
     
     try {
@@ -479,8 +460,7 @@ Output JSON (ONLY the JSON object, no other text or markdown formatting like \`\
             }
           };
           break;
-          
-        // Add more actions as needed
+
           
         default:
           result = {
@@ -495,7 +475,6 @@ Output JSON (ONLY the JSON object, no other text or markdown formatting like \`\
           };
       }
       
-      // Add successful modifying actions to history
       if (result.metadata?.success && this.isModifyingAction(parsedCommand.action)) {
         this.addToCommandHistory(parsedCommand, result);
       }
@@ -573,7 +552,6 @@ Output JSON (ONLY the JSON object, no other text or markdown formatting like \`\
       };
     }
     
-    // For simplicity, we'll just report what would be undone without implementing the actual undo
     return {
       type: 'drive_action',
       content: `The last action "${lastModifiableAction.command.action}" would be undone.`,
@@ -629,19 +607,16 @@ export const getGoogleDriveAgent = async (userId: string): Promise<GoogleDriveAg
   return agentInstances.get(userId)!;
 };
 
-// Initialize agent for a user and return auth URL if needed
 export const initializeGDriveAgent = async (userId: string): Promise<string | null> => {
   const agent = await getGoogleDriveAgent(userId);
   return agent.initialize();
 };
 
-// Process auth code from OAuth callback
 export const handleAuthCallback = async (userId: string, code: string): Promise<boolean> => {
   const agent = await getGoogleDriveAgent(userId);
   return agent.handleAuthCode(code);
 };
 
-// Process a Google Drive command
 export const processGDriveMessage = async (
   message: string,
   modelId: string,
@@ -650,11 +625,9 @@ export const processGDriveMessage = async (
   parsedCommand?: ParsedDriveCommand
 ): Promise<DriveResult> => {
   try {
-    // Ensure agent is initialized
     const agent = await getGoogleDriveAgent(userId);
     const authUrl = await agent.initialize();
-    
-    // If authorization is required, return a special response directing to plugins page
+
     if (authUrl) {
       const pluginsUrl = process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/plugins` : '/plugins';
       return {
@@ -672,12 +645,11 @@ export const processGDriveMessage = async (
       };
     }
     
-    // If a parsedCommand is provided and confirmed is true, execute it directly
     if (parsedCommand && confirmed) {
       return await agent.executeParsedCommand(parsedCommand, true);
     }
     
-    // Otherwise, process the natural language command
+
     return await agent.processNaturalLanguageCommand(message, modelId);
   } catch (error) {
     console.error('Error processing Google Drive message:', error);

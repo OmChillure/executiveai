@@ -152,44 +152,36 @@ Remember to structure this as a comprehensive report with all relevant informati
   
   public async conductResearch(query: string): Promise<ResearchResult> {
     try {
-      // Clean up the query
       const cleanQuery = this.extractActualQuery(query);
       console.log(`Original query: "${query}"\nCleaned query: "${cleanQuery}"`);
       
-      // Step 1: Search for information and get top URLs
       const topUrls = await this.searchForInfo(cleanQuery);
       
       if (topUrls.length === 0) {
         throw new Error('No search results found for the query');
       }
       
-      // Step 2: Extract content from each URL one by one
       let allInfo = "";
       const allImages: string[] = [];
       
       for (const url of topUrls) {
-        // Extract from each URL individually
         const { content, images } = await this.extractContentFromUrl(url);
-        
-        // Append content
+
         if (content) {
           allInfo += "\n" + content;
         }
-        
-        // Collect images
+
         if (images.length > 0) {
           allImages.push(...images);
         }
       }
       
-      // Step 3: Generate report if we got some content
       if (!allInfo.trim()) {
         throw new Error('Failed to extract any useful content from the search results');
       }
       
       const report = await this.generateStructuredReport(allInfo, cleanQuery);
-      
-      // Step 4: Return the research result
+
       return {
         type: 'research',
         content: report,
@@ -210,12 +202,8 @@ Remember to structure this as a comprehensive report with all relevant informati
     }
   }
   
-  /**
-   * Helper method to extract the actual query from user input
-   * Removes phrases like "can you", "please", etc.
-   */
+
   private extractActualQuery(input: string): string {
-    // List of common request phrases to remove
     const requestPhrases = [
       'can you', 'could you', 'please', 'i want', 'i need', 
       'get details about', 'tell me about', 'create a report on',
@@ -224,17 +212,14 @@ Remember to structure this as a comprehensive report with all relevant informati
     
     let cleanedQuery = input.toLowerCase();
     
-    // Remove request phrases from the beginning
     for (const phrase of requestPhrases) {
       if (cleanedQuery.startsWith(phrase)) {
         cleanedQuery = cleanedQuery.substring(phrase.length).trim();
       }
     }
     
-    // Remove any ending question marks or periods
     cleanedQuery = cleanedQuery.replace(/[?.!]$/, '').trim();
     
-    // If we've removed too much, just use the original input
     if (cleanedQuery.length < 3) {
       return input;
     }
@@ -243,7 +228,6 @@ Remember to structure this as a comprehensive report with all relevant informati
   }
 }
 
-// Singleton instance
 let agent: ResearchAgent | null = null;
 
 /**
@@ -251,7 +235,7 @@ let agent: ResearchAgent | null = null;
  */
 export const processResearchRequest = async (
   query: string,
-  modelId: string // This parameter is not used but kept for API compatibility
+  modelId: string 
 ): Promise<ResearchResult> => {
   try {
     if (!agent) {
@@ -259,7 +243,6 @@ export const processResearchRequest = async (
       await agent.initialize();
     }
     
-    // Process the user's query
     return await agent.conductResearch(query);
   } catch (error) {
     console.error('Error processing research request:', error);
