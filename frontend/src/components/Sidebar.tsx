@@ -6,7 +6,7 @@ import { Plus, ChevronUp, ChevronDown, LogOut, Trash2, Network } from "lucide-re
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { useSession, signOut } from "next-auth/react"
+import { signOut, useSession } from "next-auth/react"
 import React from "react"
 
 interface ChatItem {
@@ -292,19 +292,12 @@ export default function Sidebar({
             {isProfileOpen && (
               <div className="absolute bottom-full mb-2 right-0 p-2 bg-[#030303] rounded-md text-sm w-full">
                 {session?.user?.email && <div className="text-gray-400 mb-2">{session.user.email}</div>}
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start text-white hover:bg-gray-700"
-                  onClick={toggleTheme}
-                >
-                  Toggle light mode
-                </Button>
 
                 {!session && (
                   <Button
                     variant="outline"
                     className="w-full justify-start text-white bg-gray-800 hover:bg-gray-700 border-gray-700"
-                    onClick={() => router.push("/login")}
+                    onClick={() => router.push("/signup")}
                   >
                     Login to your account
                   </Button>
@@ -314,8 +307,7 @@ export default function Sidebar({
                   className="w-full justify-start text-white hover:bg-gray-700"
                   onClick={() => {
                     signOut({
-                      redirect: true,
-                      callbackUrl: "/api/auth/signin",
+                      redirectTo: "/signup",
                     })
                   }}
                 >

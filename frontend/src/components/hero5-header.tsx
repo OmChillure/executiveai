@@ -9,13 +9,13 @@ import { useScroll } from "@/hooks/ScrollContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
 
-const menuItems = [
-  { name: "Features", id: "features" },
-  { name: "About", id: "about" },
-  { name: "Pricing", id: "pricing" },
-  { name: "FAQs", id: "faqs" },
-  { name: "Marketplace", id: "" },
-];
+// const menuItems = [
+//   { name: "Features", id: "features" },
+//   { name: "About", id: "about" },
+//   { name: "Pricing", id: "pricing" },
+//   { name: "FAQs", id: "faqs" },
+//   { name: "Marketplace", id: "" },
+// ];
 
 export const HeroHeader = () => {
   const [menuState, setMenuState] = React.useState(false);
@@ -64,7 +64,7 @@ export const HeroHeader = () => {
                 aria-label="home"
                 className="flex items-center space-x-2"
               >
-                Taurus
+                Executive AI
               </Link>
 
               <button
@@ -77,7 +77,7 @@ export const HeroHeader = () => {
               </button>
             </div>
 
-            <div className="absolute inset-0 m-auto hidden size-fit lg:block">
+            {/* <div className="absolute inset-0 m-auto hidden size-fit lg:block">
               <ul className="flex gap-8 text-sm">
                 {menuItems.map((item, index) => (
                   <li key={index}>
@@ -90,7 +90,7 @@ export const HeroHeader = () => {
                   </li>
                 ))}
               </ul>
-            </div>
+            </div> */}
 
             <div
               className={cn(
@@ -98,7 +98,7 @@ export const HeroHeader = () => {
                 menuState && "block lg:flex"
               )}
             >
-              <div className="lg:hidden">
+              {/* <div className="lg:hidden">
                 <ul className="space-y-6 text-base">
                   {menuItems.map((item, index) => (
                     <li key={index}>
@@ -111,48 +111,13 @@ export const HeroHeader = () => {
                     </li>
                   ))}
                 </ul>
-              </div>
+              </div> */}
               <div className="flex w-full flex-col space-y-3 sm:flex-row sm:gap-3 sm:space-y-0 md:w-fit">
-                {session?.user ? (
-                  <Button variant={"outline"} onClick={async() => {
-                    await signOut()
-                  }}>
-                    Logout
-                  </Button>
-                ) : (
-                  <Link href="/api/auth/signin">
-                    Login
-                  </Link>
-                )}
-
-                <Button
-                  asChild
-                  size="sm"
-                  className={cn(isScrolled && "lg:hidden")}
-                >
-                  <Link href="https://x.com/noviumcp">
-                    <Image
-                      src={"/brand-x.svg"}
-                      height={20}
-                      width={20}
-                      alt="Twitter"
-                    />
-                  </Link>
+                <Link href={"/signup"}>
+                <Button>
+                  Sign Up
                 </Button>
-                <Button
-                  asChild
-                  size="sm"
-                  className={cn(isScrolled ? "lg:inline-flex" : "hidden")}
-                >
-                  <Link href="https://x.com/noviumcp">
-                    <Image
-                      src={"/brand-x.svg"}
-                      height={20}
-                      width={20}
-                      alt="Twitter"
-                    />
-                  </Link>
-                </Button>
+                </Link>
               </div>
             </div>
           </div>
