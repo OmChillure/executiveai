@@ -78,6 +78,20 @@ export const getAgentCapabilities = async (
 
     let capabilities;
     switch (agent.type) {
+      case 'research':
+        capabilities = {
+          type: 'research',
+          features: [
+            'Research report',
+            'Report generation',
+            'Fact checking'
+          ],
+          requirements: [
+            'Research query',
+          ],
+          supported_models: 'all'
+        };
+        break;
       default:
         capabilities = {
           type: agent.type,
