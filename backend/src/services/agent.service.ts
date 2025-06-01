@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db';
 import { aiAgents } from '../db/schema';
 import * as aiModelService from './ai-model.service';
+import * as researchService from '../agents/research.service';
 
 dotenv.config();
 
@@ -223,7 +224,6 @@ RESPOND WITH VALID JSON ONLY:
   }
 };
 
-// Helper function to create fallback result
 function createFallbackResult(reason: string): AgentRoutingResult {
   return {
     agentId: null,
@@ -234,9 +234,10 @@ function createFallbackResult(reason: string): AgentRoutingResult {
   };
 }
 
-// Helper function to get agent use cases
 function getAgentUseCase(agentType: string): string {
   switch (agentType) {
+    case 'research':
+      return 'Detailed research reports, fact-checking, comprehensive analysis';
     default:
       return 'Specialized processing';
   }
@@ -264,6 +265,22 @@ export const processAgentMessage = async (
     console.log(`Processing message with ${agent.type} agent:`, agent.name);
 
     switch (agent.type) {
+
+      case 'research': {
+        const result = await researchService.processResearchRequest(
+          message,
+          config.modelId
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            ...result.metadata,
+            agentUsed: agent.name
+          },
+          error: result.error
+        };
+      }
 
       default:
         throw new Error(`Unsupported agent type: ${agent.type}`);
