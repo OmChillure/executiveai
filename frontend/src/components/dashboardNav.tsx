@@ -76,10 +76,6 @@ export function Navbar({ isOpen, setIsOpen, className }: NavbarProps) {
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-
-            <Button>
-                Private Agent
-            </Button>
         </div>
     )
 }

@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const DATABASE_URL = 'postgresql://postgres:ZfwG8Xm9sIVhMmg9@db.awziqffbuztngifprgxn.supabase.co:5432/postgres'
+const DATABASE_URL = 'postgresql://postgres.bcfgzoapdrpycgpmrkou:gp4zOlSgzpERFZ5s@aws-0-ap-southeast-1.pooler.supabase.com:5432/postgres'
 
 const globalForDb = globalThis as unknown as {
   conn: postgres.Sql | undefined;
