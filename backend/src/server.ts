@@ -6,6 +6,7 @@ import { errorHandler } from './middleware/error.middleware';
 import { chatRoutes } from './routes/chat.routes';
 import { modelsRoutes } from './routes/models.routes';
 import { agentRoutes } from './routes/agent.route';
+import { gdriveRoutes } from './routes/gdrive.route';
 
 dotenv.config();
 
@@ -34,6 +35,7 @@ app.use('/data', express.static(path.join(__dirname, '../data')));
 app.use('/api/chat', chatRoutes);
 app.use('/api/models', modelsRoutes);
 app.use('/api/agents', agentRoutes);
+app.use('/api/gdrive', gdriveRoutes);
 
 app.get('/', (req, res) => {
   res.json({
