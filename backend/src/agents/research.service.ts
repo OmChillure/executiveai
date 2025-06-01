@@ -192,7 +192,7 @@ Remember to structure this as a comprehensive report with all relevant informati
       // Step 4: Return the research result
       return {
         type: 'research',
-        content: 'Research completed successfully',
+        content: report,
         metadata: {
           sources: topUrls,
           images: allImages.slice(0, 5),
