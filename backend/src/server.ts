@@ -11,7 +11,7 @@ import { gdriveRoutes } from './routes/gdrive.route';
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 5001;
 const API_KEY = process.env.API_KEY;
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -53,8 +53,7 @@ app.get('/', (req, res) => {
 
 app.use(errorHandler);
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });
-
 export default app;
