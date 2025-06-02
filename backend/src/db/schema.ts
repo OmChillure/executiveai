@@ -7,6 +7,7 @@ import {
   integer
 } from "drizzle-orm/pg-core"
 import type { AdapterAccount } from "next-auth/adapters"
+import { randomUUID } from "crypto";
 
 const project_name = "executiveai"
 
@@ -71,7 +72,7 @@ export const verificationTokens = pgTable(
 export const chatSessions = pgTable(`${project_name}_chat_session`, {
   id: text("id")
     .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+    .$defaultFn(() => randomUUID()),
   userId: text("userId")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
@@ -92,7 +93,7 @@ export const chatSessionsRelations = relations(chatSessions, ({ one, many }) => 
 export const aiModels = pgTable(`${project_name}_ai_model`, {
   id: text("id")
     .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+    .$defaultFn(() => randomUUID()),
   name: text("name").notNull(),
   provider: text("provider").notNull(),
   modelId: text("modelId").notNull(),
@@ -109,7 +110,7 @@ export const aiModelsRelations = relations(aiModels, ({ many }) => ({
 export const aiAgents = pgTable(`${project_name}_ai_agent`, {
   id: text("id")
     .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+    .$defaultFn(() => randomUUID()),
   name: text("name").notNull(),
   type: text("type").notNull(), // e.g., 'youtube', 'forms', etc.
   // configuration: text("configuration"),
@@ -125,7 +126,7 @@ export const aiAgentsRelations = relations(aiAgents, ({ many }) => ({
 export const messages = pgTable(`${project_name}_message`, {
   id: text("id")
     .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+    .$defaultFn(() => randomUUID()),
   sessionId: text("sessionId")
     .notNull()
     .references(() => chatSessions.id, { onDelete: "cascade" }),
@@ -157,7 +158,7 @@ export const messagesRelations = relations(messages, ({ one }) => ({
 export const waitlist = pgTable(`${project_name}_waitlist`, {
   id: text("id")
     .primaryKey()
-    .$defaultFn(() => crypto.randomUUID()),
+    .$defaultFn(() => randomUUID()),
   email: text("email").notNull().unique(),
   role: text("role").notNull(),
   description: text("description"),

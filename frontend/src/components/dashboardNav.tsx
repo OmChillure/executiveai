@@ -66,14 +66,14 @@ export function Navbar({ isOpen, setIsOpen, className }: NavbarProps) {
                             <ChevronDown className="h-4 w-4 mt-[4px]" />
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-56 bg-[#171717] border-[#171717] text-white">
+                    {/* <DropdownMenuContent align="start" className="w-56 bg-[#171717] border-[#171717] text-white">
                         <Link href={"/agents"}>
                             <DropdownMenuItem className="hover:bg-[#171717] focus:bg-[#030303] cursor-pointer">All Agents</DropdownMenuItem>
                         </Link>
                         <DropdownMenuItem className="hover:bg-[#171717] focus:bg-[#030303] cursor-pointer">
                             Clear All Chats
                         </DropdownMenuItem>
-                    </DropdownMenuContent>
+                    </DropdownMenuContent> */}
                 </DropdownMenu>
             </div>
         </div>

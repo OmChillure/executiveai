@@ -78,29 +78,56 @@ export default function ChatPage({
   const [processingResponse, setProcessingResponse] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [currentChat, setCurrentChat] = useState<ChatItem | null>(null)
+  const [pendingMessage, setPendingMessage] = useState<{content: string, modelId: string} | null>(null)
+  const [hasInitiallyLoadedChats, setHasInitiallyLoadedChats] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   const router = useRouter()
   const pathname = usePathname()
   const { data: session } = useSession()
 
+  // Initial load - fetch chats only once
   useEffect(() => {
-    fetchChats()
+    if (!hasInitiallyLoadedChats) {
+      fetchChats()
+      setHasInitiallyLoadedChats(true)
+    }
     loadAIModels()
     loadAIAgents()
+  }, [])
 
+  // Handle pathname changes - only fetch specific chat if needed
+  useEffect(() => {
     if (pathname && pathname.startsWith("/chat/")) {
       const id = pathname.replace("/chat/", "")
       if (id && id !== "undefined") {
         setCurrentChatId(id)
-        fetchChatSession(id).then((chat) => {
-          if (chat) {
-            setCurrentChat(chat)
-          }
-        })
+        
+        // Check if we already have this chat in our local state
+        const existingChat = chats.find(chat => chat.id === id)
+        if (existingChat) {
+          setCurrentChat(existingChat)
+        } else {
+          // Only fetch if we don't have it locally
+          fetchChatSession(id).then((chat) => {
+            if (chat) {
+              setCurrentChat(chat)
+              // Add to chats list if it's not there (edge case)
+              setChats(prevChats => {
+                if (!prevChats.find(c => c.id === chat.id)) {
+                  return [chat, ...prevChats]
+                }
+                return prevChats
+              })
+            }
+          })
+        }
       }
+    } else {
+      setCurrentChatId(null)
+      setCurrentChat(null)
     }
-  }, [pathname])
+  }, [pathname, chats])
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -262,6 +289,7 @@ export default function ChatPage({
       if (response.ok) {
         const newChat = await response.json()
 
+        // Update local state instead of fetching all chats
         setChats((prevChats) => [newChat, ...prevChats])
         router.push(`/chat/${newChatId}`)
         setCurrentChatId(newChatId)
@@ -292,28 +320,18 @@ export default function ChatPage({
     }
   }
 
-  // RESTORED: Original handleSubmit with redirect logic + file upload support
-  const handleSubmit = async (messageContent: string, modelId: string, sessionId: string) => {
+ const handleSubmit = async (messageContent: string, modelId: string, sessionId: string) => {
     if (!messageContent.trim() || !modelId) return
 
     try {
       setSendingMessage(true)
       const userToken = token || localStorage.getItem("token")
-
+      
       let chatId = currentChatId
 
-      // RESTORED: Generate new chat ID if no current chat
       if (!chatId) {
         chatId = uuidv4()
-        setCurrentChatId(chatId)
 
-        // RESTORED: First redirect to the new chat page
-        router.push(`/chat/${chatId}`)
-
-        // RESTORED: Wait for navigation to start
-        await new Promise((resolve) => setTimeout(resolve, 100))
-
-        // RESTORED: Create new chat session
         const createResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/chat`, {
           method: "POST",
           headers: {
@@ -330,9 +348,23 @@ export default function ChatPage({
         if (createResponse.ok) {
           const newChat = await createResponse.json()
 
-          // RESTORED: Add new chat to the list locally instead of fetching all
+          // Update local state instead of fetching all chats
           setChats((prevChats) => [newChat, ...prevChats])
+          setCurrentChatId(chatId)
+          setCurrentChat({
+            id: chatId,
+            userId: session?.user?.id ?? "",
+            title: messageContent.slice(0, 30),
+            createdAt: new Date().toISOString(),
+            messages: [],
+          })
+        } else {
+          throw new Error("Failed to create chat session")
         }
+        
+        router.push(`/chat/${chatId}`)
+
+        await new Promise(resolve => setTimeout(resolve, 100))
       }
 
       const newUserMessage: Message = {
@@ -343,6 +375,7 @@ export default function ChatPage({
         createdAt: new Date().toISOString(),
       }
 
+      // Update local state immediately
       if (currentChat) {
         setCurrentChat({
           ...currentChat,
@@ -360,6 +393,7 @@ export default function ChatPage({
 
       setProcessingResponse(true)
 
+      // Send the message
       const messageResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/chat/${chatId}/messages`, {
         method: "POST",
         headers: {
@@ -381,7 +415,7 @@ export default function ChatPage({
         messages: currentChat ? [...currentChat.messages, newUserMessage] : [newUserMessage],
       })
 
-      // RESTORED: Polling logic
+      // Start polling for response
       let attempts = 0
       const maxAttempts = 30
       const pollInterval = 2000
@@ -402,7 +436,6 @@ export default function ChatPage({
         }
       })
 
-      // RESTORED: Poll for response function
       const pollForResponse = async () => {
         if (attempts >= maxAttempts) {
           setProcessingResponse(false)
@@ -421,20 +454,15 @@ export default function ChatPage({
         try {
           const chatSession = await fetchChatSession(chatId!)
           if (chatSession && chatSession.messages && chatSession.messages.length > 0) {
-            // RESTORED: Find AI response
             const aiResponse = chatSession.messages.find(
               (m: Message) => m.role === "ai" && m.createdAt > newUserMessage.createdAt,
             )
 
             if (aiResponse) {
-              // RESTORED: Update with real AI response
               setCurrentChat(chatSession)
-
-              // RESTORED: Update the chat in the sidebar list locally
               updateChatInList(chatId!, {
                 messages: chatSession.messages,
               })
-
               setProcessingResponse(false)
               return
             }
@@ -500,6 +528,7 @@ export default function ChatPage({
       })
 
       if (response.ok) {
+        // Update local state instead of fetching all chats
         setChats(chats.filter((chat) => chat.id !== chatId))
         toast.success("Chat deleted successfully")
 
@@ -519,7 +548,7 @@ export default function ChatPage({
     if (message.role === "user") {
       return (
         <div key={message.id} className="flex justify-end mb-4">
-          <div className="bg-blue-600 text-white rounded-xl py-2 px-4 max-w-[70%]">{message.content}</div>
+          <div className="bg-white text-black rounded-xl py-2 px-4 max-w-[70%]">{message.content}</div>
         </div>
       )
     } else {
@@ -575,6 +604,14 @@ export default function ChatPage({
       )
     }
   }
+
+  // Pass pending message to the input if we have one
+  useEffect(() => {
+    if (pendingMessage && pathname?.includes('/chat/')) {
+      // Clear pending message once we've navigated
+      setPendingMessage(null)
+    }
+  }, [pathname, pendingMessage])
 
   return (
     <div className="flex h-screen bg-[#030303] overflow-hidden">
