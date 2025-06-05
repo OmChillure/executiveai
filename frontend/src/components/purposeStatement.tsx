@@ -11,7 +11,7 @@ const PurposeStatement: React.FC = () => {
         Multiple Agents to deliver Secure Service.
       </h2>
       <p className="text-transparent bg-clip-text bg-gradient-to-r from-[#8e5c4c] to-[#adb3bc] text-sm mt-6 w-88">
-        executiveAI intelligently selects the right agent to perform any task you need, all from a single command.
+        onaraAI intelligently selects the right agent to perform any task you need, all from a single command.
       </p>
 
 
