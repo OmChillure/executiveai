@@ -7,6 +7,7 @@ import { chatRoutes } from './routes/chat.routes';
 import { modelsRoutes } from './routes/models.routes';
 import { agentRoutes } from './routes/agent.route';
 import { gdriveRoutes } from './routes/gdrive.route';
+import { fileRoutes } from './routes/file.routes';
 
 dotenv.config();
 
@@ -36,6 +37,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/models', modelsRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/gdrive', gdriveRoutes);
+app.use('/api/files', fileRoutes);
 
 app.get('/', (req, res) => {
   res.json({
