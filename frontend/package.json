@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.9.1",
+    "@radix-ui/react-dialog": "^1.1.14",
     "@radix-ui/react-dropdown-menu": "^2.1.15",
     "@radix-ui/react-label": "^2.1.7",
     "@radix-ui/react-scroll-area": "^1.2.9",
@@ -27,8 +28,10 @@
     "next-auth": "5.0.0-beta.27",
     "postgres": "^3.4.7",
     "react": "^19.0.0",
+    "react-dialog": "link:radix-ui\\react-dialog",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
+    "resend": "^4.5.2",
     "sonner": "^2.0.4",
     "tailwind-merge": "^3.3.0",
     "uuid": "^11.1.0"
