@@ -11,8 +11,8 @@ export interface ProcessedFile {
   originalName: string;
   mimeType: string;
   size: number;
-  content?: string; 
-  buffer: Buffer;
+  content?: string; // Extracted text content for display
+  buffer: Buffer; // Original file buffer for programmatic access
   metadata?: {
     pageCount?: number;
     sheetNames?: string[];
@@ -53,8 +53,10 @@ class FileUploadService {
     'text/xml'
   ];
 
+  // In-memory storage for processed files (per session)
   private fileStorage: Map<string, ProcessedFile[]> = new Map();
 
+  // Fix: Updated multer configuration with proper types
   public getMulterConfig(): multer.Multer {
     return multer({
       storage: multer.memoryStorage(),
@@ -204,6 +206,7 @@ class FileUploadService {
       const sheetNames = workbook.SheetNames;
       let content = '';
 
+      // Extract text from all sheets
       sheetNames.forEach((sheetName, index) => {
         const worksheet = workbook.Sheets[sheetName];
         const csvData = XLSX.utils.sheet_to_csv(worksheet);
@@ -231,7 +234,8 @@ class FileUploadService {
         dynamicTyping: true
       });
 
-      const preview = Papa.unparse(parsed.data.slice(0, 10));
+      // Create a preview of the CSV content
+      const preview = Papa.unparse(parsed.data.slice(0, 10)); // First 10 rows
       
       return {
         ...file,
@@ -270,10 +274,13 @@ class FileUploadService {
   }
 
   private async processImage(file: ProcessedFile): Promise<ProcessedFile> {
+    // For images, we just store the buffer and basic metadata
+    // Image analysis would require additional libraries or services
     return {
       ...file,
       content: `Image file: ${file.originalName} (${(file.size / 1024).toFixed(1)} KB)`,
       metadata: {
+        // Could add image dimensions here if needed
       }
     };
   }
@@ -309,19 +316,23 @@ class FileUploadService {
     return `file_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  // Get files for a session
   public getSessionFiles(sessionId: string): ProcessedFile[] {
     return this.fileStorage.get(sessionId) || [];
   }
 
+  // Clear files for a session
   public clearSessionFiles(sessionId: string): void {
     this.fileStorage.delete(sessionId);
   }
 
+  // Get a specific file
   public getFile(sessionId: string, fileId: string): ProcessedFile | null {
     const files = this.getSessionFiles(sessionId);
     return files.find(f => f.id === fileId) || null;
   }
 
+  // Remove a specific file
   public removeFile(sessionId: string, fileId: string): boolean {
     const files = this.getSessionFiles(sessionId);
     const filteredFiles = files.filter(f => f.id !== fileId);
@@ -333,7 +344,8 @@ class FileUploadService {
     
     return false;
   }
-  
+
+  // Add method to integrate with AI processing
   public prepareFilesForAI(sessionId: string): string {
     const files = this.getSessionFiles(sessionId);
     
