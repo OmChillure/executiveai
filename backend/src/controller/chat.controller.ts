@@ -3,7 +3,6 @@ import { AppError } from '../middleware/error.middleware';
 import * as chatService from '../services/chat.service';
 import { thinkingProcessService, ThinkingStep } from '../services/tools.service';
 
-
 interface CreateChatSessionRequest {
   title?: string;
   userId: string;
@@ -13,6 +12,7 @@ interface CreateChatSessionRequest {
 interface SendMessageRequest {
   content: string;
   aiModelId: string;
+  stream?: boolean;
 }
 
 interface FileAnalysisRequest {
@@ -20,7 +20,6 @@ interface FileAnalysisRequest {
   analysisPrompt: string;
   aiModelId: string;
 }
-
 
 export const createChatSession = async (
   req: Request<{}, {}, CreateChatSessionRequest>,
@@ -99,6 +98,7 @@ export const deleteChatSession = async (
   }
 };
 
+// UPDATED: Enhanced to support both streaming and non-streaming
 export const sendMessage = async (
   req: Request<{ id: string }, {}, SendMessageRequest>,
   res: Response,
@@ -106,7 +106,7 @@ export const sendMessage = async (
 ) => {
   try {
     const { id: sessionId } = req.params;
-    const { content, aiModelId } = req.body;
+    const { content, aiModelId, stream = false } = req.body;
     const userId = req.user?.userId;
 
     if (!content) {
@@ -127,6 +127,12 @@ export const sendMessage = async (
       throw error;
     }
 
+    // Check if streaming is requested
+    if (stream) {
+      return sendMessageStream(req, res, next);
+    }
+
+    // Regular non-streaming response
     let session = await chatService.getSession(sessionId);
     
     if (!session) {
@@ -157,6 +163,145 @@ export const sendMessage = async (
       console.error('Error creating AI response:', error);
       throw error;
     }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// NEW: Dedicated streaming endpoint
+export const sendMessageStream = async (
+  req: Request<{ id: string }, {}, SendMessageRequest>,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id: sessionId } = req.params;
+    const { content, aiModelId } = req.body;
+    const userId = req.user?.userId;
+
+    if (!content || !aiModelId || !userId) {
+      const error = new Error('Missing required fields') as AppError;
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // Setup SSE headers
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Cache-Control, Authorization, Content-Type',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    });
+    res.write('data: {"type": "connected"}\n\n');
+
+    let session = await chatService.getSession(sessionId);
+    
+    if (!session) {
+      session = { ...(await chatService.createSession(userId, sessionId, content.slice(0, 30))), messages: [] };
+    }
+
+    res.write(`data: ${JSON.stringify({ 
+      type: 'status',
+      message: 'Processing your request...'
+    })}\n\n`);
+
+    const onChunk = (chunk: string, isComplete: boolean = false) => {
+      try {
+        if (isComplete) {
+          res.write(`data: ${JSON.stringify({ 
+            type: 'response_complete',
+            chunk: '',
+            complete: true
+          })}\n\n`);
+        } else {
+          res.write(`data: ${JSON.stringify({ 
+            type: 'response_chunk',
+            chunk,
+            complete: false
+          })}\n\n`);
+        }
+      } catch (error) {
+        console.error('Error writing chunk:', error);
+      }
+    };
+
+    try {
+      const aiResponse = await chatService.createAIResponseStream(
+        sessionId,
+        content,
+        aiModelId,
+        userId,
+        onChunk
+      );
+
+      res.write(`data: ${JSON.stringify({ 
+        type: 'final_response',
+        userMessage: aiResponse.userMessage,
+        aiResponse: aiResponse.message,
+        modelInfo: aiResponse.metadata
+      })}\n\n`);
+
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (error) {
+      console.error('Error in streaming AI response generation:', error);
+      res.write(`data: ${JSON.stringify({ 
+        type: 'error',
+        error: (error as Error).message
+      })}\n\n`);
+      res.end();
+    }
+  } catch (error) {
+    console.error('Error in sendMessageStream:', error);
+    
+    if (!res.headersSent) {
+      next(error);
+    } else {
+      try {
+        res.write(`data: ${JSON.stringify({ 
+          type: 'error',
+          error: (error as Error).message
+        })}\n\n`);
+        res.end();
+      } catch (writeError) {
+        console.error('Error writing SSE error:', writeError);
+        res.end();
+      }
+    }
+  }
+};
+
+export const analyzeFile = async (
+  req: Request<{ id: string }, {}, FileAnalysisRequest>,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { id: sessionId } = req.params;
+    const { fileId, analysisPrompt, aiModelId } = req.body;
+    const userId = req.user?.userId;
+
+    if (!fileId || !analysisPrompt || !aiModelId || !userId) {
+      const error = new Error('Missing required fields') as AppError;
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const aiResponse = await chatService.createFileAnalysisMessage(
+      sessionId,
+      fileId,
+      analysisPrompt,
+      aiModelId,
+      userId
+    );
+
+    res.json({
+      userMessage: aiResponse.userMessage,
+      aiResponse: aiResponse.message,
+      modelInfo: aiResponse.metadata
+    });
   } catch (error) {
     next(error);
   }
@@ -237,7 +382,7 @@ export const sendMessageWithThinking = async (
       next(error);
     } else {
       try {
-        res.write(`data: ${JSON.stringify({ 
+        res.write(`data: ${JSON.stringify({
           type: 'error',
           error: (error as Error).message
         })}\n\n`);
@@ -248,39 +393,4 @@ export const sendMessageWithThinking = async (
       }
     }
   }
-};
-
-
-export const analyzeFile = async (
-  req: Request<{ id: string }, {}, FileAnalysisRequest>,
-  res: Response,
-  next: NextFunction
-) => {
-  try {
-    const { id: sessionId } = req.params;
-    const { fileId, analysisPrompt, aiModelId } = req.body;
-    const userId = req.user?.userId;
-
-    if (!fileId || !analysisPrompt || !aiModelId || !userId) {
-      const error = new Error('Missing required fields') as AppError;
-      error.statusCode = 400;
-      throw error;
-    }
-
-    const aiResponse = await chatService.createFileAnalysisMessage(
-      sessionId,
-      fileId,
-      analysisPrompt,
-      aiModelId,
-      userId
-    );
-
-    res.json({
-      userMessage: aiResponse.userMessage,
-      aiResponse: aiResponse.message,
-      modelInfo: aiResponse.metadata
-    });
-  } catch (error) {
-    next(error);
-  }
-};
+}

@@ -1,3 +1,4 @@
+// routes/chat.routes.ts - Updated with streaming support
 import { Router } from 'express';
 import * as chatController from '../controller/chat.controller';
 import { verifyApiKey } from '../middleware/auth.middleware';
@@ -10,8 +11,11 @@ router.get('/', chatController.getChatSessions);
 router.post('/', chatController.createChatSession);
 router.get('/:id', chatController.getChatSession);
 router.delete('/:id', chatController.deleteChatSession);
-router.post('/:id/messages', chatController.sendMessage);
-router.post('/:id/tools', chatController.sendMessageWithThinking);
+
+router.post('/:id/messages', chatController.sendMessage); 
+router.post('/:id/stream', chatController.sendMessageStream);
+router.post('/:id/tools', chatController.sendMessageWithThinking); 
+
 router.post('/:id/analyze-file', chatController.analyzeFile);
 
 export const chatRoutes = router;

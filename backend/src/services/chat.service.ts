@@ -23,6 +23,8 @@ interface AIResponseResult {
 interface ThinkingProcessResult extends AIResponseResult {
 }
 
+// Streaming callback types
+export type StreamCallback = (chunk: string, isComplete?: boolean) => void;
 
 export const createMessage = async (params: CreateMessageParams) => {
   try {
@@ -81,7 +83,6 @@ export const createUserMessage = async (
     aiAgentId
   });
 };
-
 
 export const createSession = async (userId: string, sessionId?: string, title?: string) => {
   try {
@@ -163,7 +164,7 @@ export const deleteSession = async (id: string) => {
   }
 };
 
-
+// Helper functions for handling different response strategies
 async function handleSimpleResponse(
   message: string, 
   modelId: string, 
@@ -190,6 +191,55 @@ async function handleSimpleResponse(
   return aiResponse.content;
 }
 
+async function handleSimpleResponseStream(
+  message: string,
+  modelId: string,
+  sessionId: string,
+  sessionFiles: any[],
+  onChunk: StreamCallback,
+  streamingSpeed: 'slow' | 'normal' | 'fast' = 'normal'
+): Promise<{ content: string; metadata: Record<string, any> }> {
+  console.log('🚀 Processing simple response with streaming...');
+  
+  const systemPrompt = sessionFiles.length > 0 
+    ? "You are a helpful AI assistant. The user has uploaded files which are included in the context. Analyze and respond to their query considering the uploaded content."
+    : "You are a helpful AI assistant that provides clear, accurate, and thoughtful responses to user questions and requests.";
+    
+  const startTime = Date.now();
+  
+  const streamingConfig = {
+    slow: { characterDelay: 60, wordPause: 20, sentencePause: 200 },
+    normal: { characterDelay: 30, wordPause: 10, sentencePause: 100 },
+    fast: { characterDelay: 15, wordPause: 5, sentencePause: 50 }
+  }[streamingSpeed];
+  
+  const streamingResponse = await aiModelService.generateAIResponseStream(
+    modelId,
+    message,
+    onChunk,
+    systemPrompt,
+    sessionId,
+    streamingConfig
+  );
+  
+  const duration = Date.now() - startTime;
+  console.log(`✅ Simple streaming response completed in ${duration}ms`);
+
+  return {
+    content: streamingResponse.content,
+    metadata: {
+      strategy: 'simple_stream',
+      provider: streamingResponse.provider,
+      model: streamingResponse.model,
+      usage: streamingResponse.usage,
+      filesProcessed: sessionFiles.length,
+      streamingSpeed,
+      duration
+    }
+  };
+}
+
+// Single agent response (non-streaming)
 async function handleSingleAgentResponse(
   message: string,
   agentId: string,
@@ -263,53 +313,88 @@ async function handleSingleAgentResponse(
   }
 }
 
-async function handleAgentChainResponse(
+// NEW: Single agent response with streaming
+async function handleSingleAgentResponseStream(
   message: string,
-  agentChain: string[],
+  agentId: string,
   modelId: string,
   sessionId: string,
   userId: string,
-  sessionFiles: any[]
+  sessionFiles: any[],
+  onChunk: StreamCallback,
+  streamingSpeed: 'slow' | 'normal' | 'fast' = 'normal'
 ): Promise<{ content: string; metadata: Record<string, any>; primaryAgentId: string | null }> {
-  console.log(`🔗 Processing agent chain with ${agentChain.length} agents:`, agentChain);
+  console.log(`🌊🤖 Processing single agent response with streaming: ${agentId}`);
   
   const startTime = Date.now();
   
   try {
-    const chainResult = await agentService.executeAgentChain(
+    const agentResponse = await agentService.processAgentMessageStream(
       message,
-      agentChain,
-      modelId,
-      userId
+      {
+        modelId,
+        agentId,
+        sessionId,
+        userId 
+      },
+      onChunk,
+      streamingSpeed
     );
     
     const duration = Date.now() - startTime;
-    console.log(`✅ Agent chain completed in ${duration}ms`);
     
+    if (agentResponse.error) {
+      console.warn(`❌ Agent ${agentId} streaming failed (${duration}ms):`, agentResponse.error);
+      return {
+        content: agentResponse.content,
+        metadata: {
+          strategy: 'agent_stream_error',
+          originalStrategy: 'single_agent_stream',
+          agentError: agentResponse.error,
+          filesProcessed: sessionFiles.length,
+          duration,
+          streamingSpeed
+        },
+        primaryAgentId: null
+      };
+    }
+    
+    console.log(`✅ Agent ${agentId} streaming completed successfully in ${duration}ms`);
     return {
-      content: chainResult.content,
+      content: agentResponse.content,
       metadata: {
-        strategy: 'agent_chain',
-        agentChain,
-        chainResults: chainResult.intermediateResults,
+        strategy: 'single_agent_stream',
+        agentUsed: agentId,
+        agentMetadata: agentResponse.metadata,
         filesProcessed: sessionFiles.length,
-        duration
+        duration,
+        streamingSpeed
       },
-      primaryAgentId: agentChain[0]
+      primaryAgentId: agentId
     };
     
   } catch (error) {
     const duration = Date.now() - startTime;
-    console.error(`❌ Agent chain error (${duration}ms):`, error);
+    console.error(`❌ Agent ${agentId} streaming error (${duration}ms):`, error);
     
-    const fallbackContent = await handleSimpleResponse(message, modelId, sessionId, sessionFiles);
+    // Fallback to simple streaming
+    console.log('🔄 Falling back to simple streaming response...');
+    const fallbackResult = await handleSimpleResponseStream(
+      message, 
+      modelId, 
+      sessionId, 
+      sessionFiles, 
+      onChunk, 
+      streamingSpeed
+    );
+    
     return {
-      content: fallbackContent,
+      content: fallbackResult.content,
       metadata: {
-        strategy: 'simple_fallback',
-        originalStrategy: 'agent_chain',
-        chainError: (error as Error).message,
-        filesProcessed: sessionFiles.length,
+        ...fallbackResult.metadata,
+        strategy: 'simple_stream_fallback',
+        originalStrategy: 'single_agent_stream',
+        agentError: (error as Error).message,
         duration
       },
       primaryAgentId: null
@@ -317,7 +402,7 @@ async function handleAgentChainResponse(
   }
 }
 
-
+// Non-streaming AI response (existing functionality)
 export const createAIResponse = async (
   sessionId: string,
   userMessageContent: string,
@@ -327,29 +412,18 @@ export const createAIResponse = async (
   const overallStartTime = Date.now();
   
   try {
-    console.log('=' .repeat(80));
     console.log('🧠 STARTING AI RESPONSE CREATION');
-    console.log('=' .repeat(80));
     console.log('📝 Session:', sessionId);
     console.log('👤 User:', userId);
-    console.log('💬 Message preview:', userMessageContent.substring(0, 100) + (userMessageContent.length > 100 ? '...' : ''));
 
     const session = await getSession(sessionId);
     if (!session) {
       throw new Error(`Chat session ${sessionId} not found`);
     }
 
-    
-    console.log('📁 Preparing file context...');
     const fileContext = fileUploadService.prepareFilesForAI(sessionId);
     const fullUserMessage = userMessageContent + fileContext;
     const sessionFiles = fileUploadService.getSessionFiles(sessionId);
-
-    console.log(`📎 Files attached: ${sessionFiles.length}`);
-    if (sessionFiles.length > 0) {
-      const totalSize = sessionFiles.reduce((sum, f) => sum + f.size, 0);
-      console.log(`📊 Total file size: ${(totalSize / 1024).toFixed(1)} KB`);
-    }
 
     const userMessage = await createUserMessage(
       sessionId,
@@ -357,20 +431,11 @@ export const createAIResponse = async (
       aiModelId
     );
 
-    
-    console.log('🧭 Analyzing message intelligence...');
-    const strategyStartTime = Date.now();
-    
     const strategy = await agentService.determineResponseStrategy(
       fullUserMessage, 
       aiModelId, 
       userId
     );
-    
-    const strategyDuration = Date.now() - strategyStartTime;
-    console.log(`Strategy determined in ${strategyDuration}ms:`, strategy.strategy);
-    console.log('Reasoning:', strategy.reasoning);
-    
     
     let responseContent: string;
     let metadata: Record<string, any> = {};
@@ -378,19 +443,15 @@ export const createAIResponse = async (
 
     switch (strategy.strategy) {
       case 'simple':
-        console.log('🚀 EXECUTING SIMPLE RESPONSE PATH');
         responseContent = await handleSimpleResponse(fullUserMessage, aiModelId, sessionId, sessionFiles);
         metadata = {
           strategy: 'simple',
           reasoning: strategy.reasoning,
-          filesProcessed: sessionFiles.length,
-          responseTime: 'fast',
-          strategyDuration
+          filesProcessed: sessionFiles.length
         };
         break;
 
       case 'single_agent':
-        console.log('🤖 EXECUTING SINGLE AGENT PATH');
         const agentResult = await handleSingleAgentResponse(
           fullUserMessage,
           strategy.agentId!,
@@ -400,38 +461,20 @@ export const createAIResponse = async (
           sessionFiles
         );
         responseContent = agentResult.content;
-        metadata = { ...agentResult.metadata, reasoning: strategy.reasoning, strategyDuration };
+        metadata = { ...agentResult.metadata, reasoning: strategy.reasoning };
         primaryAgentId = agentResult.primaryAgentId;
         break;
 
-      case 'agent_chain':
-        console.log('🔗 EXECUTING AGENT CHAIN PATH');
-        const chainResult = await handleAgentChainResponse(
-          fullUserMessage,
-          strategy.agentChain!,
-          aiModelId,
-          sessionId,
-          userId,
-          sessionFiles
-        );
-        responseContent = chainResult.content;
-        metadata = { ...chainResult.metadata, reasoning: strategy.reasoning, strategyDuration };
-        primaryAgentId = chainResult.primaryAgentId;
-        break;
-
       default:
-        console.log('🚨 FALLBACK TO SIMPLE PATH');
         responseContent = await handleSimpleResponse(fullUserMessage, aiModelId, sessionId, sessionFiles);
         metadata = {
           strategy: 'simple_fallback',
           originalStrategy: strategy.strategy,
           reasoning: strategy.reasoning,
-          filesProcessed: sessionFiles.length,
-          strategyDuration
+          filesProcessed: sessionFiles.length
         };
     }
 
-    console.log('💾 Creating AI message...');
     const aiMessage = await createMessage({
       sessionId,
       role: 'ai',
@@ -462,17 +505,147 @@ export const createAIResponse = async (
     };
 
   } catch (error) {
-    const overallDuration = Date.now() - overallStartTime;
-    console.log('=' .repeat(80));
-    console.log('ERROR IN AI RESPONSE CREATION');
-    console.log('=' .repeat(80));
-    console.error('Error details:', error);
-    console.log('=' .repeat(80));
+    console.error('Error in AI response creation:', error);
     throw error;
   }
 };
 
+// UPDATED: Streaming AI response with agent support
+export const createAIResponseStream = async (
+  sessionId: string,
+  userMessageContent: string,
+  aiModelId: string,
+  userId: string,
+  onChunk: StreamCallback,
+  streamingSpeed: 'slow' | 'normal' | 'fast' = 'normal'
+): Promise<AIResponseResult> => {
+  const overallStartTime = Date.now();
+  
+  try {
+    console.log('🌊 STARTING STREAMING AI RESPONSE CREATION');
+    console.log('📝 Session:', sessionId);
+    console.log('👤 User:', userId);
+    console.log('🎛️  Streaming Speed:', streamingSpeed);
 
+    const session = await getSession(sessionId);
+    if (!session) {
+      throw new Error(`Chat session ${sessionId} not found`);
+    }
+
+    const fileContext = fileUploadService.prepareFilesForAI(sessionId);
+    const fullUserMessage = userMessageContent + fileContext;
+    const sessionFiles = fileUploadService.getSessionFiles(sessionId);
+
+    const userMessage = await createUserMessage(
+      sessionId,
+      userMessageContent,
+      aiModelId
+    );
+
+    const strategy = await agentService.determineResponseStrategy(
+      fullUserMessage, 
+      aiModelId, 
+      userId
+    );
+    
+    console.log(`Strategy: ${strategy.strategy}`);
+    
+    let responseContent: string;
+    let metadata: Record<string, any> = {};
+    let primaryAgentId: string | null = null;
+
+    // ALL strategies now support streaming!
+    switch (strategy.strategy) {
+      case 'simple':
+        console.log('🌊 EXECUTING SIMPLE STREAMING');
+        const streamResult = await handleSimpleResponseStream(
+          fullUserMessage, 
+          aiModelId, 
+          sessionId, 
+          sessionFiles,
+          onChunk,
+          streamingSpeed
+        );
+        responseContent = streamResult.content;
+        metadata = { 
+          ...streamResult.metadata, 
+          reasoning: strategy.reasoning
+        };
+        break;
+
+      case 'single_agent':
+        console.log('🌊🤖 EXECUTING AGENT STREAMING');
+        const agentResult = await handleSingleAgentResponseStream(
+          fullUserMessage,
+          strategy.agentId!,
+          aiModelId,
+          sessionId,
+          userId,
+          sessionFiles,
+          onChunk,
+          streamingSpeed
+        );
+        responseContent = agentResult.content;
+        metadata = { ...agentResult.metadata, reasoning: strategy.reasoning };
+        primaryAgentId = agentResult.primaryAgentId;
+        break;
+
+      default:
+        console.log('🚨 FALLBACK TO SIMPLE STREAMING');
+        const fallbackResult = await handleSimpleResponseStream(
+          fullUserMessage, 
+          aiModelId, 
+          sessionId, 
+          sessionFiles,
+          onChunk,
+          streamingSpeed
+        );
+        responseContent = fallbackResult.content;
+        metadata = {
+          ...fallbackResult.metadata,
+          strategy: 'simple_stream_fallback',
+          originalStrategy: strategy.strategy,
+          reasoning: strategy.reasoning
+        };
+    }
+
+    const aiMessage = await createMessage({
+      sessionId,
+      role: 'ai',
+      content: responseContent,
+      aiModelId,
+      aiAgentId: primaryAgentId || undefined
+    });
+
+    await db.update(chatSessions)
+      .set({ updatedAt: new Date() })
+      .where(eq(chatSessions.id, sessionId));
+
+    const overallDuration = Date.now() - overallStartTime;
+  
+    return {
+      userMessage,
+      message: aiMessage,
+      metadata: {
+        ...metadata,
+        overallDuration,
+        streaming: true,
+        sessionFiles: sessionFiles.map(f => ({
+          id: f.id,
+          name: f.originalName,
+          type: f.type,
+          size: f.size
+        }))
+      }
+    };
+
+  } catch (error) {
+    console.error('❌🌊 ERROR IN STREAMING AI RESPONSE CREATION:', error);
+    throw error;
+  }
+};
+
+// Enhanced thinking process with streaming support
 export const createAIResponseWithThinking = async (
   sessionId: string,
   userMessageContent: string,
@@ -493,7 +666,6 @@ export const createAIResponseWithThinking = async (
       throw new Error(`Chat session ${sessionId} not found`);
     }
 
-    
     const fileContext = fileUploadService.prepareFilesForAI(sessionId);
     const fullUserMessage = userMessageContent + fileContext;
     const sessionFiles = fileUploadService.getSessionFiles(sessionId);
@@ -535,13 +707,11 @@ export const createAIResponseWithThinking = async (
       status: 'in_progress'
     });
 
-    const strategyStartTime = Date.now();
     const strategy = await agentService.determineResponseStrategy(
       fullUserMessage,
       aiModelId,
       userId
     );
-    const strategyDuration = Date.now() - strategyStartTime;
 
     thinkingProcessService.updateStep(sessionId, 'intent_analysis', {
       status: 'completed',
@@ -550,9 +720,7 @@ export const createAIResponseWithThinking = async (
         strategy: strategy.strategy,
         reasoning: strategy.reasoning,
         agentId: strategy.agentId,
-        agentChain: strategy.agentChain,
-        hasFiles: sessionFiles.length > 0,
-        analysisDuration: strategyDuration
+        hasFiles: sessionFiles.length > 0
       }
     });
 
@@ -563,12 +731,6 @@ export const createAIResponseWithThinking = async (
       const agent = await agentService.getAgentById(strategy.agentId!);
       executionTitle = `${agent?.name || 'Agent'} Processing`;
       executionDescription = `Using ${agent?.name || 'specialized agent'} to process your request...`;
-    } else if (strategy.strategy === 'agent_chain') {
-      executionTitle = 'Multi-Agent Processing';
-      executionDescription = `Coordinating ${strategy.agentChain!.length} agents...`;
-    } else {
-      executionTitle = 'AI Processing';
-      executionDescription = 'Generating AI response...';
     }
 
     thinkingProcessService.addStep(sessionId, {
@@ -582,15 +744,13 @@ export const createAIResponseWithThinking = async (
     let responseContent: string;
     let metadata: Record<string, any> = {};
     let primaryAgentId: string | null = null;
-    const executionStartTime = Date.now();
 
     switch (strategy.strategy) {
       case 'simple':
         responseContent = await handleSimpleResponse(fullUserMessage, aiModelId, sessionId, sessionFiles);
         metadata = { 
           strategy: 'simple', 
-          filesProcessed: sessionFiles.length,
-          strategyDuration 
+          filesProcessed: sessionFiles.length
         };
         break;
 
@@ -604,33 +764,16 @@ export const createAIResponseWithThinking = async (
           sessionFiles
         );
         responseContent = agentResult.content;
-        metadata = { ...agentResult.metadata, strategyDuration };
+        metadata = agentResult.metadata;
         primaryAgentId = agentResult.primaryAgentId;
-        break;
-
-      case 'agent_chain':
-        const chainResult = await handleAgentChainResponse(
-          fullUserMessage,
-          strategy.agentChain!,
-          aiModelId,
-          sessionId,
-          userId,
-          sessionFiles
-        );
-        responseContent = chainResult.content;
-        metadata = { ...chainResult.metadata, strategyDuration };
-        primaryAgentId = chainResult.primaryAgentId;
         break;
 
       default:
         responseContent = await handleSimpleResponse(fullUserMessage, aiModelId, sessionId, sessionFiles);
         metadata = { 
-          strategy: 'simple_fallback',
-          strategyDuration 
+          strategy: 'simple_fallback'
         };
     }
-
-    const executionDuration = Date.now() - executionStartTime;
 
     thinkingProcessService.updateStep(sessionId, 'execution', {
       status: 'completed',
@@ -638,7 +781,6 @@ export const createAIResponseWithThinking = async (
       metadata: {
         responseLength: responseContent.length,
         strategy: strategy.strategy,
-        executionDuration,
         agentUsed: primaryAgentId
       }
     });
@@ -680,7 +822,6 @@ export const createAIResponseWithThinking = async (
       thinkingProcessService.clearSession(sessionId);
     }, 2000);
 
-
     return {
       userMessage,
       message: aiMessage,
@@ -698,12 +839,7 @@ export const createAIResponseWithThinking = async (
     };
 
   } catch (error) {
-    const overallDuration = Date.now() - overallStartTime;
-    console.log('=' .repeat(80));
-    console.log('❌💭 ERROR IN AI RESPONSE WITH THINKING');
-    console.log('=' .repeat(80));
-    console.error('Error details:', error);
-    console.log('⏱️  Duration until error:', overallDuration + 'ms');
+    console.error('❌💭 ERROR IN AI RESPONSE WITH THINKING:', error);
 
     const steps = thinkingProcessService.getSteps(sessionId);
     steps.forEach(step => {
@@ -715,11 +851,9 @@ export const createAIResponseWithThinking = async (
       }
     });
     
-    console.log('=' .repeat(80));
     throw error;
   }
 };
-
 
 export const createFileAnalysisMessage = async (
   sessionId: string,
@@ -730,8 +864,6 @@ export const createFileAnalysisMessage = async (
 ): Promise<AIResponseResult> => {
   try {
     console.log('📄 Creating file-specific analysis...');
-    console.log('📁 File ID:', fileId);
-    console.log('💬 Analysis prompt:', analysisPrompt.substring(0, 100) + '...');
     
     const file = fileUploadService.getFile(sessionId, fileId);
     if (!file) {
@@ -752,8 +884,6 @@ export const createFileAnalysisMessage = async (
     fileContext += '--- END FILE ANALYSIS ---\n';
 
     const fullPrompt = analysisPrompt + fileContext;
-    
-    console.log('🔍 File context prepared, length:', fileContext.length);
 
     return await createAIResponse(sessionId, fullPrompt, aiModelId, userId);
   } catch (error) {
@@ -762,11 +892,8 @@ export const createFileAnalysisMessage = async (
   }
 };
 
-
 export const getMessageHistoryWithAgents = async (sessionId: string) => {
   try {
-    console.log('📜 Fetching message history with agent details for session:', sessionId);
-    
     const session = await getSession(sessionId);
     if (!session) return null;
 
@@ -786,8 +913,6 @@ export const getMessageHistoryWithAgents = async (sessionId: string) => {
         return message;
       })
     );
-
-    console.log(`📊 Retrieved ${messagesWithAgents.length} messages with agent details`);
 
     return {
       ...session,

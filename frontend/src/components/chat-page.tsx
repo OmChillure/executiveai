@@ -10,6 +10,17 @@ import Sidebar from "@/components/Sidebar"
 import { Navbar } from "./dashboardNav"
 import { motion } from "framer-motion"
 
+interface ProcessedFile {
+  id: string
+  originalName: string
+  mimeType: string
+  size: number
+  type: "text" | "document" | "spreadsheet" | "image" | "pdf" | "unknown"
+  content?: string
+  hasFullContent: boolean
+  processingError?: string
+}
+
 interface AIModel {
   id: string
   name: string
@@ -32,6 +43,7 @@ interface Message {
   aiModelId: string
   aiAgentId?: string
   createdAt: string
+  files?: ProcessedFile[]
 }
 
 interface ChatItem {
@@ -61,6 +73,24 @@ const suggestionCards = [
   },
 ]
 
+// Add this component before the main component
+const FileIcon = ({ type, mimeType }: { type: string; mimeType: string }) => {
+  switch (type) {
+    case "image":
+      return <div className="w-5 h-5 bg-blue-400 rounded flex items-center justify-center text-xs text-white">IMG</div>
+    case "pdf":
+      return <div className="w-5 h-5 bg-red-400 rounded flex items-center justify-center text-xs text-white">PDF</div>
+    case "spreadsheet":
+      return <div className="w-5 h-5 bg-green-400 rounded flex items-center justify-center text-xs text-white">XLS</div>
+    case "document":
+      return <div className="w-5 h-5 bg-blue-400 rounded flex items-center justify-center text-xs text-white">DOC</div>
+    case "text":
+      return <div className="w-5 h-5 bg-gray-400 rounded flex items-center justify-center text-xs text-white">TXT</div>
+    default:
+      return <div className="w-5 h-5 bg-gray-400 rounded flex items-center justify-center text-xs text-white">FILE</div>
+  }
+}
+
 export default function ChatPage({
   token,
 }: {
@@ -78,7 +108,7 @@ export default function ChatPage({
   const [processingResponse, setProcessingResponse] = useState(false)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [currentChat, setCurrentChat] = useState<ChatItem | null>(null)
-  const [pendingMessage, setPendingMessage] = useState<{content: string, modelId: string} | null>(null)
+  const [pendingMessage, setPendingMessage] = useState<{ content: string; modelId: string } | null>(null)
   const [hasInitiallyLoadedChats, setHasInitiallyLoadedChats] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -102,9 +132,9 @@ export default function ChatPage({
       const id = pathname.replace("/chat/", "")
       if (id && id !== "undefined") {
         setCurrentChatId(id)
-        
+
         // Check if we already have this chat in our local state
-        const existingChat = chats.find(chat => chat.id === id)
+        const existingChat = chats.find((chat) => chat.id === id)
         if (existingChat) {
           setCurrentChat(existingChat)
         } else {
@@ -113,8 +143,8 @@ export default function ChatPage({
             if (chat) {
               setCurrentChat(chat)
               // Add to chats list if it's not there (edge case)
-              setChats(prevChats => {
-                if (!prevChats.find(c => c.id === chat.id)) {
+              setChats((prevChats) => {
+                if (!prevChats.find((c) => c.id === chat.id)) {
                   return [chat, ...prevChats]
                 }
                 return prevChats
@@ -320,13 +350,13 @@ export default function ChatPage({
     }
   }
 
- const handleSubmit = async (messageContent: string, modelId: string, sessionId: string) => {
+  const handleSubmit = async (messageContent: string, modelId: string, sessionId: string, files?: ProcessedFile[]) => {
     if (!messageContent.trim() || !modelId) return
 
     try {
       setSendingMessage(true)
       const userToken = token || localStorage.getItem("token")
-      
+
       let chatId = currentChatId
 
       if (!chatId) {
@@ -361,10 +391,10 @@ export default function ChatPage({
         } else {
           throw new Error("Failed to create chat session")
         }
-        
+
         router.push(`/chat/${chatId}`)
 
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       }
 
       const newUserMessage: Message = {
@@ -373,6 +403,7 @@ export default function ChatPage({
         content: messageContent,
         aiModelId: modelId,
         createdAt: new Date().toISOString(),
+        files: files || [],
       }
 
       // Update local state immediately
@@ -548,7 +579,36 @@ export default function ChatPage({
     if (message.role === "user") {
       return (
         <div key={message.id} className="flex justify-end mb-4">
-          <div className="bg-white text-black rounded-xl py-2 px-4 max-w-[70%]">{message.content}</div>
+          <div className="max-w-[70%]">
+            {/* Show files above user message - Carousel Style */}
+            {message.files && message.files.length > 0 && (
+              <div className="mb-3 flex justify-end">
+                <div className="max-w-[70%]">
+                  <div className="mb-1 p-2 rounded-xl border border-neutral-700/30 bg-neutral-800/20">
+                    <div
+                      className="flex items-center gap-3 overflow-x-auto"
+                      style={{ scrollbarWidth: "thin", scrollbarColor: "#6b7280 transparent" }}
+                    >
+                      {message.files.map((file) => (
+                        <div key={file.id} className="relative flex-shrink-0">
+                          <div className="w-12 h-12 rounded-lg border border-neutral-700/50 bg-neutral-800/30 flex items-center justify-center overflow-hidden">
+                            <FileIcon type={file.type} mimeType={file.mimeType} />
+                          </div>
+                          <div className="mt-1 text-xs text-gray-400 truncate w-12 text-center">
+                            {file.originalName}
+                          </div>
+                          {file.processingError && (
+                            <div className="mt-1 text-xs text-red-400 truncate w-12 text-center">Error</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="bg-white text-black rounded-xl py-2 px-4">{message.content}</div>
+          </div>
         </div>
       )
     } else {
@@ -605,20 +665,20 @@ export default function ChatPage({
     }
   }
 
-  // Pass pending message to the input if we have one
   useEffect(() => {
-    if (pendingMessage && pathname?.includes('/chat/')) {
-      // Clear pending message once we've navigated
+    if (pendingMessage && pathname?.includes("/chat/")) {
       setPendingMessage(null)
     }
   }, [pathname, pendingMessage])
 
   return (
     <div className="flex h-screen bg-[#030303] overflow-hidden">
-      <div className={cn(
-        "fixed left-0 top-0 h-full bg-neutral-900 border-r border-neutral-800 transition-all duration-300 z-10",
-        isOpen ? "w-64" : "w-0"
-      )}>
+      <div
+        className={cn(
+          "fixed left-0 top-0 h-full bg-neutral-900 border-r border-neutral-800 transition-all duration-300 z-10",
+          isOpen ? "w-64" : "w-0",
+        )}
+      >
         <div className="h-full overflow-hidden">
           <Sidebar
             chats={chats}
@@ -687,9 +747,7 @@ export default function ChatPage({
                           whileHover={{ scale: 1.02 }}
                           whileTap={{ scale: 0.98 }}
                         >
-                          <div className="text-white font-medium transition-colors">
-                            {suggestion.title}
-                          </div>
+                          <div className="text-white font-medium transition-colors">{suggestion.title}</div>
                           <div className="text-gray-500 text-sm mt-1">{suggestion.subtitle}</div>
                         </motion.button>
                       ))}

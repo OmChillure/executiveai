@@ -1,3 +1,4 @@
+// server.ts - Fixed with complete CORS configuration
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -17,19 +18,61 @@ const API_KEY = process.env.API_KEY;
 const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  origin: [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'https://your-frontend-domain.com',
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type', 
+    'Authorization', 
+    'Cache-Control',
+    'Accept',
+    'Accept-Encoding',
+    'Accept-Language',
+    'Connection',
+    'Host',
+    'Origin',
+    'Referer',
+    'User-Agent',
+    'X-Requested-With'
+  ],
+  exposedHeaders: [
+    'Content-Type',
+    'Cache-Control',
+    'Connection'
+  ],
   credentials: true,
   preflightContinue: false,
-  optionsSuccessStatus: 204
+  optionsSuccessStatus: 204,
+  maxAge: 86400
 }));
+
+app.options('/api/chat/:id/stream', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.status(204).send();
+});
+
+app.options('/api/chat/:id/tools', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Accept');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.status(204).send();
+});
 
 app.use(express.json({
   limit: '50mb'
 }));
 
-app.use(express.urlencoded({ extended: true }));
+app.use(express.urlencoded({ 
+  extended: true,
+  limit: '50mb'
+}));
 
 app.use('/data', express.static(path.join(__dirname, '../data')));
 
@@ -39,23 +82,12 @@ app.use('/api/agents', agentRoutes);
 app.use('/api/gdrive', gdriveRoutes);
 app.use('/api/files', fileRoutes);
 
-app.get('/', (req, res) => {
-  res.json({
-    message: 'OnAra AI API is running',
-    endpoints: {
-      chat: '/api/chat',
-      models: '/api/models',
-      agents: '/api/agents',
-      files: '/api/files',
-      auth: JWT_SECRET ? 'Required (Bearer token)' : 'Not configured',
-      docs: 'See available routes in the documentation'
-    }
-  });
-});
-
 app.use(errorHandler);
+
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
+
 });
+
 export default app;
