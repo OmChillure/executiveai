@@ -29,7 +29,7 @@ interface ProcessedFile {
 }
 
 interface AiInputProps {
-  onSubmit: (message: string, modelId: string, sessionId: string) => Promise<void>;
+  onSubmit: (message: string, modelId: string, sessionId: string, files?: ProcessedFile[]) => Promise<void>;
   models?: AIModel[];
   loading?: boolean;
   loadingModels?: boolean;
@@ -37,7 +37,6 @@ interface AiInputProps {
   sessionId: string;
 }
 
-// Hook for auto-resize textarea (same as before)
 function useAutoResizeTextarea({
   minHeight,
   maxHeight,
@@ -242,13 +241,23 @@ export function AiInput({
   const handleSubmit = async () => {
     if (!value.trim() || loading || !selectedModel) return
 
+    // Store current values before clearing
+    const currentValue = value
+    const currentModel = selectedModel
+    const currentFiles = processedFiles
+
+    setValue("")
+    adjustHeight(true)
+    setProcessedFiles([])
+    setUploadedFiles([])
+
     try {
-      await onSubmit(value, selectedModel, sessionId)
-      setValue("")
-      adjustHeight(true)
+      await onSubmit(currentValue, currentModel, sessionId, currentFiles)
     } catch (error) {
       console.error("Error submitting message:", error)
       toast.error("Failed to send message")
+      setValue(currentValue)
+      setProcessedFiles(currentFiles)
     }
   }
 

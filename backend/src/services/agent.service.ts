@@ -5,6 +5,8 @@ import { db } from '../db';
 import { aiAgents } from '../db/schema';
 import * as aiModelService from './ai-model.service';
 import * as researchService from '../agents/research.service';
+import { StreamCallback } from './ai-model.service';
+import { makeAgentStreamable } from '../utils/streaming';
 
 dotenv.config();
 
@@ -17,7 +19,6 @@ if (!ROUTER_GEMINI_API_KEY) {
 const genAI = new GoogleGenerativeAI(ROUTER_GEMINI_API_KEY || 'dummy_key');
 const routerModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
-// Agent interfaces
 export interface AgentInfo {
   id: string;
   name: string;
@@ -62,7 +63,7 @@ export const getAvailableAgents = async (): Promise<AgentInfo[]> => {
     }));
   } catch (error) {
     console.error('Error fetching agents:', error);
-    return []; // Return empty array instead of throwing
+    return [];
   }
 };
 
@@ -95,12 +96,11 @@ export const validateAgentExists = async (agentId: string): Promise<boolean> => 
   }
 };
 
-// LLM-powered intent analysis - the core intelligence
+// LLM-powered intent analysis
 export const analyzeUserIntent = async (message: string): Promise<AgentRoutingResult> => {
   try {
     console.log('Analyzing user intent with LLM for:', message.substring(0, 100) + '...');
     
-    // Get available agents dynamically
     const availableAgents = await getAvailableAgents();
     
     if (!availableAgents || availableAgents.length === 0) {
@@ -114,7 +114,6 @@ export const analyzeUserIntent = async (message: string): Promise<AgentRoutingRe
       };
     }
 
-    // Create agent descriptions for LLM context
     const agentDescriptions = availableAgents.map(agent => {
       return `- ${agent.id}: ${agent.name} (${agent.type})\n  Description: ${agent.description || 'No description'}\n  Use for: ${getAgentUseCase(agent.type)}`;
     }).join('\n\n');
@@ -140,23 +139,11 @@ ROUTING RULES:
   → Route to appropriate agent(s)
   → Examples: YouTube links, research requests, handwriting conversion, Google Drive operations
 
-ANALYSIS CRITERIA:
-1. Does the message contain URLs, specific service references, or specialized requests?
-2. Does it require external data fetching, file processing, or specialized algorithms?
-3. Can a general AI answer this adequately without special tools?
-
-CONFIDENCE LEVELS:
-- 90-100: Very clear specialized need (YouTube URL, explicit "research report")
-- 70-89: Likely needs agent (research questions, handwriting requests)
-- 50-69: Uncertain, lean toward general AI
-- 0-49: Definitely general conversation
-
 RESPOND WITH VALID JSON ONLY:
 {
   "agentId": "actual_agent_id_or_null",
   "confidence": 85,
   "reasoning": "Clear explanation of decision",
-  "chainOfAgents": ["agent1", "agent2"] or null,
   "isSimpleQuery": true/false,
   "complexity": "simple/moderate/complex"
 }
@@ -166,7 +153,6 @@ RESPOND WITH VALID JSON ONLY:
     const responseText = result.response.text();
 
     try {
-      // Extract JSON from response
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         console.warn('No JSON found in LLM response, defaulting to simple query');
@@ -176,32 +162,11 @@ RESPOND WITH VALID JSON ONLY:
       const jsonText = jsonMatch[0];
       const parsedResponse = JSON.parse(jsonText) as AgentRoutingResult;
       
-      // Validate agent IDs exist in database
       if (parsedResponse.agentId) {
         const agentExists = await validateAgentExists(parsedResponse.agentId);
         if (!agentExists) {
           console.warn(`Agent ${parsedResponse.agentId} not found in database, falling back to general AI`);
           return createFallbackResult(`Agent ${parsedResponse.agentId} not found in database`);
-        }
-      }
-
-      // Validate chain agents if specified
-      if (parsedResponse.chainOfAgents && parsedResponse.chainOfAgents.length > 0) {
-        const validChain: string[] = [];
-        for (const agentId of parsedResponse.chainOfAgents) {
-          const exists = await validateAgentExists(agentId);
-          if (exists) {
-            validChain.push(agentId);
-          } else {
-            console.warn(`Chain agent ${agentId} not found, removing from chain`);
-          }
-        }
-        parsedResponse.chainOfAgents = validChain.length > 0 ? validChain : undefined;
-        
-        // If no valid agents in chain, fall back to single agent or general AI
-        if (validChain.length === 0) {
-          parsedResponse.agentId = null;
-          parsedResponse.confidence = 0;
         }
       }
       
@@ -238,11 +203,20 @@ function getAgentUseCase(agentType: string): string {
   switch (agentType) {
     case 'research':
       return 'Detailed research reports, fact-checking, comprehensive analysis';
+    case 'youtube':
+      return 'YouTube video analysis, transcript summarization, Q&A about video content';
+    case 'handwriting':
+      return 'Convert text to handwritten format, generate handwritten documents';
+    case 'forms':
+      return 'Google Forms analysis, form filling, form data extraction';
+    case 'gdrive':
+      return 'Google Drive operations, file management, search, upload, download, organize files';
     default:
       return 'Specialized processing';
   }
 }
 
+// Regular agent processing (non-streaming)
 export const processAgentMessage = async (
   message: string,
   config: AgentConfig
@@ -265,7 +239,6 @@ export const processAgentMessage = async (
     console.log(`Processing message with ${agent.type} agent:`, agent.name);
 
     switch (agent.type) {
-
       case 'research': {
         const result = await researchService.processResearchRequest(
           message,
@@ -282,6 +255,147 @@ export const processAgentMessage = async (
         };
       }
 
+      case 'youtube': {
+        const youtubeService = await import('../agents/youtube.service');
+        const result = await youtubeService.processYoutubeMessage(
+          message,
+          config.modelId
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            agentUsed: agent.name,
+            videoId: result.videoId,
+            summary: result.summary,
+            keyPoints: result.keyPoints,
+            query: result.query,
+            answer: result.answer,
+            transcriptLength: result.transcriptLength
+          },
+          error: result.error
+        };
+      }
+
+      case 'handwriting': {
+        const handwritingService = await import('../agents/handwriting.service');
+        const result = await handwritingService.processHandwritingMessage(
+          message,
+          config.modelId
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            ...result.metadata,
+            agentUsed: agent.name
+          },
+          error: result.error
+        };
+      }
+
+      case 'forms': {
+        const formsService = await import('../agents/google-forms.service');
+        const result = await formsService.processFormsMessage(
+          message,
+          config.modelId
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            agentUsed: agent.name,
+            form: result.form,
+            answers: result.answers,
+            formData: result.formData,
+            formId: result.formId
+          },
+          error: result.error
+        };
+      }
+
+      case 'gdrive': {
+        const gdriveService = await import('../agents/gdrive.service');
+        
+        // Handle Google Drive with proper error handling
+        try {
+          const result = await gdriveService.processGDriveMessage(
+            message,
+            config.modelId,
+            config.userId || 'unknown'
+          );
+          
+          // Check if it's an unknown action or authorization required
+          if (result.type === 'error' && result.content.includes('not implemented')) {
+            return {
+              content: `I understand you want to work with Google Drive. Here are some specific commands you can try:
+
+📁 **File Operations:**
+• "List my Google Drive files"
+• "Show my drive contents" 
+• "Search for documents in my drive"
+• "Find all PDFs in my drive"
+
+🔍 **Search Examples:**
+• "Search for files named 'report'"
+• "Find all images in my drive"
+• "Show files modified today"
+
+📂 **Folder Operations:**
+• "Show contents of folder 'Projects'"
+• "List files in my Documents folder"
+
+Please try one of these specific commands, and I'll help you with your Google Drive!`,
+              type: 'gdrive_help',
+              metadata: {
+                agentUsed: agent.name,
+                availableCommands: [
+                  'list files', 'search files', 'show folder contents',
+                  'find documents', 'search by name', 'search by type'
+                ]
+              }
+            };
+          }
+          
+          // Handle authorization required
+          if (result.type === 'authorization_required') {
+            return {
+              content: result.content,
+              type: result.type,
+              metadata: {
+                ...result.metadata,
+                agentUsed: agent.name
+              }
+            };
+          }
+          
+          return {
+            content: result.content,
+            type: result.type,
+            metadata: {
+              ...result.metadata,
+              agentUsed: agent.name
+            },
+            error: result.error
+          };
+        } catch (error) {
+          return {
+            content: `I'm ready to help with Google Drive operations! Try commands like:
+• "List my Google Drive files"
+• "Search for documents"
+• "Show folder contents"
+• "Find files by name"
+
+What would you like to do with your Google Drive?`,
+            type: 'gdrive_help',
+            metadata: {
+              agentUsed: agent.name,
+              error: (error as Error).message
+            }
+          };
+        }
+      }
+
       default:
         throw new Error(`Unsupported agent type: ${agent.type}`);
     }
@@ -289,6 +403,35 @@ export const processAgentMessage = async (
     console.error('Error processing agent message:', error);
     return {
       content: `I encountered an error while processing your request: ${(error as Error).message}. Let me help you with a general response instead.`,
+      error: (error as Error).message
+    };
+  }
+};
+
+// NEW: Streaming agent processing
+export const processAgentMessageStream = async (
+  message: string,
+  config: AgentConfig,
+  onChunk: StreamCallback,
+  streamingSpeed: 'slow' | 'normal' | 'fast' = 'normal'
+): Promise<AgentResponse> => {
+  try {
+    console.log(`🌊 Processing agent message with streaming: ${config.agentId}`);
+    
+    // Use the streaming wrapper to convert any agent response to streaming
+    const result = await makeAgentStreamable(
+      () => processAgentMessage(message, config),
+      onChunk,
+      streamingSpeed
+    );
+    
+    return result;
+  } catch (error) {
+    console.error('Error processing streaming agent message:', error);
+    const errorContent = `I encountered an error while processing your request: ${(error as Error).message}`;
+    onChunk(errorContent, true);
+    return {
+      content: errorContent,
       error: (error as Error).message
     };
   }
@@ -329,15 +472,12 @@ export const executeAgentChain = async (
 
       if (result.error) {
         console.warn(`Agent ${agentId} failed, continuing chain:`, result.error);
-        // Continue with original input if agent fails
         currentInput = message;
       } else if (result.content) {
-        // Use result as input for next agent
         currentInput = `Previous result: ${result.content}\n\nOriginal request: ${message}`;
       }
     }
   
-    // Generate summary of all results
     const summaryPrompt = `
 Combine these agent results into a comprehensive response for: "${message}"
 
