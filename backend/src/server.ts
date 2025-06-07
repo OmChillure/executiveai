@@ -10,6 +10,7 @@ import { gdriveRoutes } from './routes/gdrive.route';
 import { fileRoutes } from './routes/file.routes';
 import { githubRoutes } from './routes/github.route';
 import { gdocsRoutes } from './routes/gdocs.route';
+import { gsheetsRoutes } from './routes/gsheets.route';
 
 dotenv.config();
 
@@ -82,6 +83,7 @@ app.use('/api/gdrive', gdriveRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/gdocs', gdocsRoutes);
+app.use('/api/gsheets', gsheetsRoutes); 
 
 app.use(errorHandler);
 

@@ -213,6 +213,8 @@ function getAgentUseCase(agentType: string): string {
       return 'Google Drive operations, file management, search, upload, download, organize files';
     case 'google_docs':
       return 'Google Docs operations, create, read, edit, share, search documents';
+    case 'google_sheets':
+      return 'Google Sheets operations, create, read, update, share, search spreadsheets';
     case 'github':
       return 'GitHub operations, summarize pull requests, dependency analysis, README.md generation';
     default:
@@ -336,9 +338,27 @@ export const processAgentMessage = async (
         };
       }
 
-      case 'googledocs': {
+      case 'google_docs': {
         const gdocsService = await import('../agents/doc.service');
         const result = await gdocsService.processGoogleDocsRequest(
+          message,
+          config.modelId,
+          config.userId || 'unknown'
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            ...result.metadata,
+            agentUsed: agent.name
+          },
+          error: result.error
+        };
+      }
+
+      case 'googlesheets': {
+        const gsheetsService = await import('../agents/gsheets.service');
+        const result = await gsheetsService.processGoogleSheetsRequest(
           message,
           config.modelId,
           config.userId || 'unknown'

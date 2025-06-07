@@ -64,12 +64,16 @@ export default function PluginChat({
   const [gdocsLoading, setGdocsLoading] = useState(false)
   const [gdocsConnected, setGdocsConnected] = useState(false)
 
+  const [gsheetsLoading, setGsheetsLoading] = useState(false)
+  const [gsheetsConnected, setGsheetsConnected] = useState(false)
+
+
   const router = useRouter()
   const pathname = usePathname()
   const { data: session } = useSession()
 
   // Helper function to check plugin status
-  const checkPluginStatus = async (pluginType: 'gdrive' | 'github' | 'gdocs') => {
+  const checkPluginStatus = async (pluginType: 'gdrive' | 'github' | 'gdocs' | 'gsheets') => {
     try {
       const userToken = token || localStorage.getItem("token")
       if (!userToken) {
@@ -98,6 +102,10 @@ export default function PluginChat({
           setGdocsConnected(data.authorized)
           if (data.authorized) localStorage.setItem("gdocs_connected", "true")
           else localStorage.removeItem("gdocs_connected")
+        } else if (pluginType === 'gsheets') {
+          setGsheetsConnected(data.authorized)
+          if (data.authorized) localStorage.setItem("gsheets_connected", "true")
+          else localStorage.removeItem("gsheets_connected")
         }
       } else {
         console.error(`Failed to check ${pluginType} auth status: ${response.status} ${response.statusText}`);
@@ -177,6 +185,75 @@ export default function PluginChat({
     }
   }
 
+  const handleConnectGsheets = async () => {
+    try {
+      setGsheetsLoading(true)
+      const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        toast.error("User not authenticated.");
+        return;
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/gsheets/auth`, {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          Accept: "application/json",
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+
+        if (data.success && data.authRequired && data.authUrl) {
+          window.location.href = data.authUrl
+        } else if (data.success && !data.authRequired) {
+          setGsheetsConnected(true)
+          localStorage.setItem("gsheets_connected", "true")
+          toast.success("Already connected to Google Sheets!")
+        }
+      } else {
+        toast.error("Failed to start Google Sheets authentication")
+      }
+    } catch (error) {
+      console.error("Error initiating Google Sheets auth:", error)
+      toast.error("Failed to start Google Sheets authentication")
+    } finally {
+      setGsheetsLoading(false)
+    }
+  }
+
+  const handleDisconnectGsheets = async () => {
+    try {
+      const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        toast.error("User not authenticated.");
+        return;
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/gsheets/disconnect`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          Accept: "application/json",
+        },
+      })
+
+      setGsheetsConnected(false)
+      localStorage.removeItem("gsheets_connected")
+
+      if (response.ok) {
+        toast.success("Successfully disconnected from Google Sheets")
+      } else {
+        toast.success("Disconnected from Google Sheets (backend issue, please verify manually).")
+      }
+    } catch (error) {
+      setGsheetsConnected(false)
+      localStorage.removeItem("gsheets_connected")
+      toast.success("Disconnected from Google Sheets (network error, please verify manually).")
+    }
+  }
+
+
 
   useEffect(() => {
     fetchChats()
@@ -194,9 +271,16 @@ export default function PluginChat({
       setGdocsConnected(true)
     }
 
+    const wasGsheetsConnected = localStorage.getItem("gsheets_connected") === "true" // NEW
+    if (wasGsheetsConnected) {
+      setGsheetsConnected(true)
+    }
+
+
     checkPluginStatus('gdrive');
     checkPluginStatus('github');
     checkPluginStatus('gdocs');
+    checkPluginStatus('gsheets');
 
     if (pathname && pathname.startsWith("/chat/")) {
       const id = pathname.replace("/chat/", "")
@@ -241,6 +325,15 @@ export default function PluginChat({
         toast.success("Successfully connected to Google Docs! You can now use Google Docs commands in chat.")
       } else if (status === "error") {
         toast.error(`Failed to connect to Google Docs. ${message || ''} Please try again.`)
+      }
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else if (connection === "gsheets") { // NEW
+      if (status === "success") {
+        setGsheetsConnected(true)
+        localStorage.setItem("gsheets_connected", "true")
+        toast.success("Successfully connected to Google Sheets! You can now use Google Sheets commands in chat.")
+      } else if (status === "error") {
+        toast.error(`Failed to connect to Google Sheets. ${message || ''} Please try again.`)
       }
       window.history.replaceState({}, document.title, window.location.pathname)
     }
@@ -406,7 +499,7 @@ export default function PluginChat({
     }
   }
 
-  // NEW: GitHub Connect/Disconnect Functions
+  // GitHub Connect/Disconnect Functions
   const handleConnectGithub = async () => {
     try {
       setGithubLoading(true)
@@ -515,6 +608,18 @@ export default function PluginChat({
         onDisconnect: handleDisconnectGdocs,
         isAvailable: true,
         connectedInfo: "Use commands like 'create document', 'read document', 'search documents' in chat",
+      },
+      {
+        id: "gsheets", 
+        name: "Google Sheets",
+        description: "Create, read, update, and manage Google Spreadsheets",
+        icon: <Database className="h-6 w-6" />,
+        isConnected: gsheetsConnected,
+        isLoading: gsheetsLoading,
+        onConnect: handleConnectGsheets,
+        onDisconnect: handleDisconnectGsheets,
+        isAvailable: true,
+        connectedInfo: "Use commands like 'create spreadsheet', 'update cells', 'read data' in chat",
       },
       {
         id: "notion",
