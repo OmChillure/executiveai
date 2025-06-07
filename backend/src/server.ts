@@ -1,4 +1,3 @@
-// server.ts - Fixed with complete CORS configuration
 import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
@@ -9,19 +8,18 @@ import { modelsRoutes } from './routes/models.routes';
 import { agentRoutes } from './routes/agent.route';
 import { gdriveRoutes } from './routes/gdrive.route';
 import { fileRoutes } from './routes/file.routes';
+import { githubRoutes } from './routes/github.route';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 5001;
-const API_KEY = process.env.API_KEY;
-const JWT_SECRET = process.env.JWT_SECRET;
 
 app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'https://your-frontend-domain.com',
+    'https://onaraai.xyz/',
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -81,13 +79,10 @@ app.use('/api/models', modelsRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/gdrive', gdriveRoutes);
 app.use('/api/files', fileRoutes);
+app.use('/api/github', githubRoutes);
 
 app.use(errorHandler);
 
-
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
-
 });
-
-export default app;

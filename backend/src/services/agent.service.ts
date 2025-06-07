@@ -7,6 +7,7 @@ import * as aiModelService from './ai-model.service';
 import * as researchService from '../agents/research.service';
 import { StreamCallback } from './ai-model.service';
 import { makeAgentStreamable } from '../utils/streaming';
+import { processGithubCommand } from '../controller/github.controller';
 
 dotenv.config();
 
@@ -211,6 +212,8 @@ function getAgentUseCase(agentType: string): string {
       return 'Google Forms analysis, form filling, form data extraction';
     case 'gdrive':
       return 'Google Drive operations, file management, search, upload, download, organize files';
+    case 'github':
+      return 'GitHub operations, summarize pull requests, dependency analysis, README.md generation';
     default:
       return 'Specialized processing';
   }
@@ -396,6 +399,23 @@ What would you like to do with your Google Drive?`,
         }
       }
 
+     case 'github': {
+        const githubService = await import('../agents/github.service');
+        const result = await githubService.processGithubMessage(
+          message,
+          config.modelId,
+          config.userId || 'unknown'
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            ...result.metadata,
+            agentUsed: agent.name
+          },
+          error: result.error
+        };
+      }
       default:
         throw new Error(`Unsupported agent type: ${agent.type}`);
     }

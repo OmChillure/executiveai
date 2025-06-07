@@ -1,3 +1,4 @@
+// pluginsChat.tsx
 "use client"
 import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
@@ -8,6 +9,7 @@ import Sidebar from "@/components/Sidebar"
 import { Navbar } from "@/components/dashboardNav"
 import { CheckCircle, ExternalLink, HardDrive, FileText, Database, Calendar, Cloud, Github, Trello } from "lucide-react"
 
+// Assuming these interfaces are correct for your data structure
 interface AIModel {
   id: string
   name: string
@@ -57,17 +59,65 @@ export default function PluginChat({
   const [gdriveLoading, setGdriveLoading] = useState(false)
   const [gdriveConnected, setGdriveConnected] = useState(false)
 
+  // GitHub integration state (NEW)
+  const [githubLoading, setGithubLoading] = useState(false)
+  const [githubConnected, setGithubConnected] = useState(false)
+
   const router = useRouter()
   const pathname = usePathname()
-  const { data: session } = useSession()
+  const { data: session } = useSession() // Used to get user session data
+
+  // Helper function to check plugin status
+  const checkPluginStatus = async (pluginType: 'gdrive' | 'github') => {
+    try {
+      const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        console.warn(`No token found for user to check ${pluginType} status.`);
+        return;
+      }
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/${pluginType}/auth/status`, {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          Accept: "application/json",
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (pluginType === 'gdrive') {
+          setGdriveConnected(data.authorized)
+          if (data.authorized) localStorage.setItem("gdrive_connected", "true")
+          else localStorage.removeItem("gdrive_connected")
+        } else if (pluginType === 'github') {
+          setGithubConnected(data.authorized)
+          if (data.authorized) localStorage.setItem("github_connected", "true")
+          else localStorage.removeItem("github_connected")
+        }
+      } else {
+        console.error(`Failed to check ${pluginType} auth status: ${response.status} ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error(`Error checking ${pluginType} auth status:`, error);
+    }
+  }
+
 
   useEffect(() => {
     fetchChats()
 
-    const wasConnected = localStorage.getItem("gdrive_connected") === "true"
-    if (wasConnected) {
+    // Initial check from localStorage (can be overwritten by actual status check)
+    const wasGdriveConnected = localStorage.getItem("gdrive_connected") === "true"
+    if (wasGdriveConnected) {
       setGdriveConnected(true)
     }
+    const wasGithubConnected = localStorage.getItem("github_connected") === "true" // NEW
+    if (wasGithubConnected) {
+      setGithubConnected(true)
+    }
+
+    // Always perform a live status check for reliability
+    checkPluginStatus('gdrive');
+    checkPluginStatus('github'); // NEW
 
     if (pathname && pathname.startsWith("/chat/")) {
       const id = pathname.replace("/chat/", "")
@@ -81,26 +131,35 @@ export default function PluginChat({
       }
     }
 
-    // Check for Google Drive auth callback
+    // Check for OAuth auth callbacks (Google Drive and GitHub)
     const params = new URLSearchParams(window.location.search)
     const connection = params.get("connection")
     const status = params.get("status")
+    const message = params.get("message") // For detailed error messages
 
-    if (connection === "gdrive" && status === "success") {
-      // Mark as connected and persist in localStorage
-      setGdriveConnected(true)
-      localStorage.setItem("gdrive_connected", "true")
-      toast.success("Successfully connected to Google Drive! You can now use Google Drive commands in chat.")
-
+    if (connection === "gdrive") {
+      if (status === "success") {
+        setGdriveConnected(true)
+        localStorage.setItem("gdrive_connected", "true")
+        toast.success("Successfully connected to Google Drive! You can now use Google Drive commands in chat.")
+      } else if (status === "error") {
+        toast.error(`Failed to connect to Google Drive. ${message || ''} Please try again.`)
+      }
       // Clear URL params
       window.history.replaceState({}, document.title, window.location.pathname)
-    } else if (connection === "gdrive" && status === "error") {
-      toast.error("Failed to connect to Google Drive. Please try again.")
-
+    } else if (connection === "github") { // NEW: GitHub OAuth callback handling
+      if (status === "success") {
+        setGithubConnected(true)
+        localStorage.setItem("github_connected", "true")
+        toast.success("Successfully connected to GitHub! You can now use GitHub commands in chat.")
+      } else if (status === "error") {
+        toast.error(`Failed to connect to GitHub. ${message || ''} Please try again.`)
+      }
       // Clear URL params
       window.history.replaceState({}, document.title, window.location.pathname)
     }
-  }, [pathname])
+
+  }, [pathname, token]) // Added token to dependencies
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -111,7 +170,10 @@ export default function PluginChat({
   const fetchChats = async () => {
     try {
       const userToken = token || localStorage.getItem("token")
-
+      if (!userToken) { // Ensure token exists before fetching chats
+        setLoadingChats(false);
+        return;
+      }
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/chat`, {
         headers: {
           Authorization: `Bearer ${userToken}`,
@@ -136,6 +198,9 @@ export default function PluginChat({
   const fetchChatSession = async (chatId: string) => {
     try {
       const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        throw new Error("User not authenticated.");
+      }
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/chat/${chatId}`, {
         headers: {
           Authorization: `Bearer ${userToken}`,
@@ -157,7 +222,10 @@ export default function PluginChat({
   const deleteChat = async (chatId: string) => {
     try {
       const userToken = token || localStorage.getItem("token")
-
+      if (!userToken) {
+        toast.error("User not authenticated.");
+        return;
+      }
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/chat/${chatId}`, {
         method: "DELETE",
         headers: {
@@ -182,10 +250,15 @@ export default function PluginChat({
     }
   }
 
-  const handleConnect = async () => {
+  // Google Drive Connect/Disconnect
+  const handleConnectGdrive = async () => {
     try {
       setGdriveLoading(true)
       const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        toast.error("User not authenticated.");
+        return;
+      }
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/gdrive/auth`, {
         headers: {
@@ -198,10 +271,8 @@ export default function PluginChat({
         const data = await response.json()
 
         if (data.success && data.authRequired && data.authUrl) {
-          // Redirect to Google's auth page
           window.location.href = data.authUrl
         } else if (data.success && !data.authRequired) {
-          // Already connected
           setGdriveConnected(true)
           localStorage.setItem("gdrive_connected", "true")
           toast.success("Already connected to Google Drive!")
@@ -217,11 +288,14 @@ export default function PluginChat({
     }
   }
 
-  const handleDisconnect = async () => {
+  const handleDisconnectGdrive = async () => {
     try {
       const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        toast.error("User not authenticated.");
+        return;
+      }
 
-      // Call backend to disconnect/clear tokens
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/gdrive/disconnect`, {
         method: "POST",
         headers: {
@@ -230,22 +304,91 @@ export default function PluginChat({
         },
       })
 
-      // Clear frontend state regardless of backend response
       setGdriveConnected(false)
       localStorage.removeItem("gdrive_connected")
 
       if (response.ok) {
         toast.success("Successfully disconnected from Google Drive")
       } else {
-        toast.success("Disconnected from Google Drive")
+        // If the backend call fails but UI state is reset, still show success message from UI perspective
+        toast.success("Disconnected from Google Drive (backend issue, please verify manually).")
       }
     } catch (error) {
-      // Clear frontend state even if backend call fails
       setGdriveConnected(false)
       localStorage.removeItem("gdrive_connected")
-      toast.success("Disconnected from Google Drive")
+      toast.success("Disconnected from Google Drive (network error, please verify manually).")
     }
   }
+
+  // NEW: GitHub Connect/Disconnect Functions
+  const handleConnectGithub = async () => {
+    try {
+      setGithubLoading(true)
+      const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        toast.error("User not authenticated.");
+        return;
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/github/auth`, {
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          Accept: "application/json",
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+
+        if (data.success && data.authRequired && data.authUrl) {
+          window.location.href = data.authUrl // Redirect to GitHub's auth page
+        } else if (data.success && !data.authRequired) {
+          setGithubConnected(true)
+          localStorage.setItem("github_connected", "true")
+          toast.success("Already connected to GitHub!")
+        }
+      } else {
+        toast.error("Failed to start GitHub authentication")
+      }
+    } catch (error) {
+      console.error("Error initiating GitHub auth:", error)
+      toast.error("Failed to start GitHub authentication")
+    } finally {
+      setGithubLoading(false)
+    }
+  }
+
+  const handleDisconnectGithub = async () => {
+    try {
+      const userToken = token || localStorage.getItem("token")
+      if (!userToken) {
+        toast.error("User not authenticated.");
+        return;
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/github/disconnect`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${userToken}`,
+          Accept: "application/json",
+        },
+      })
+
+      setGithubConnected(false)
+      localStorage.removeItem("github_connected")
+
+      if (response.ok) {
+        toast.success("Successfully disconnected from GitHub")
+      } else {
+        toast.success("Disconnected from GitHub (backend issue, please verify manually).")
+      }
+    } catch (error) {
+      setGithubConnected(false)
+      localStorage.removeItem("github_connected")
+      toast.success("Disconnected from GitHub (network error, please verify manually).")
+    }
+  }
+
 
   // Plugin UI content
   const renderPluginContent = () => {
@@ -260,10 +403,22 @@ export default function PluginChat({
         icon: <HardDrive className="h-6 w-6" />,
         isConnected: gdriveConnected,
         isLoading: gdriveLoading,
-        onConnect: handleConnect,
-        onDisconnect: handleDisconnect,
+        onConnect: handleConnectGdrive, // Renamed for clarity
+        onDisconnect: handleDisconnectGdrive, // Renamed for clarity
         isAvailable: true,
         connectedInfo: "Use commands like 'list my recent Drive files' in chat",
+      },
+      {
+        id: "github", // NEW: GitHub Plugin Entry
+        name: "GitHub",
+        description: "Access and manage your repositories, issues, and pull requests",
+        icon: <Github className="h-6 w-6" />,
+        isConnected: githubConnected,
+        isLoading: githubLoading,
+        onConnect: handleConnectGithub,
+        onDisconnect: handleDisconnectGithub,
+        isAvailable: true, // Mark as available
+        connectedInfo: "Use commands like 'list my repos', 'summarize repo user/repo', or 'create issue' in chat",
       },
       {
         id: "notion",
@@ -272,18 +427,7 @@ export default function PluginChat({
         icon: <FileText className="h-6 w-6" />,
         isConnected: false,
         isLoading: false,
-        onConnect: () => {},
-        onDisconnect: () => {},
-        isAvailable: false,
-      },
-      {
-        id: "github",
-        name: "GitHub",
-        description: "Access your repositories",
-        icon: <Github className="h-6 w-6" />,
-        isConnected: false,
-        isLoading: false,
-        onConnect: () => {},
+        onConnect: () => { toast.info("Notion integration coming soon!"); },
         onDisconnect: () => {},
         isAvailable: false,
       },
@@ -294,7 +438,7 @@ export default function PluginChat({
         icon: <Trello className="h-6 w-6" />,
         isConnected: false,
         isLoading: false,
-        onConnect: () => {},
+        onConnect: () => { toast.info("Trello integration coming soon!"); },
         onDisconnect: () => {},
         isAvailable: false,
       },
@@ -305,7 +449,7 @@ export default function PluginChat({
         icon: <Calendar className="h-6 w-6" />,
         isConnected: false,
         isLoading: false,
-        onConnect: () => {},
+        onConnect: () => { toast.info("Google Calendar integration coming soon!"); },
         onDisconnect: () => {},
         isAvailable: false,
       },
@@ -316,7 +460,7 @@ export default function PluginChat({
         icon: <Cloud className="h-6 w-6" />,
         isConnected: false,
         isLoading: false,
-        onConnect: () => {},
+        onConnect: () => { toast.info("Generic Cloud Storage integration coming soon!"); },
         onDisconnect: () => {},
         isAvailable: false,
       },
@@ -367,10 +511,6 @@ export default function PluginChat({
                     )}
                   </div>
                   <p className="text-gray-400 text-sm">{plugin.description}</p>
-
-                    {plugin.isConnected && plugin.connectedInfo && (
-                    <p className="text-green-400/80 text-xs mt-2">💡 {plugin.connectedInfo}</p>
-                  )}
                 </div>
 
                 <div className="mt-auto">
