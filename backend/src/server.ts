@@ -9,6 +9,7 @@ import { agentRoutes } from './routes/agent.route';
 import { gdriveRoutes } from './routes/gdrive.route';
 import { fileRoutes } from './routes/file.routes';
 import { githubRoutes } from './routes/github.route';
+import { gdocsRoutes } from './routes/gdocs.route';
 
 dotenv.config();
 
@@ -80,6 +81,7 @@ app.use('/api/agents', agentRoutes);
 app.use('/api/gdrive', gdriveRoutes);
 app.use('/api/files', fileRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/gdocs', gdocsRoutes);
 
 app.use(errorHandler);
 

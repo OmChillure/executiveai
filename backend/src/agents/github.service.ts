@@ -1,14 +1,14 @@
-import { Octokit, RestEndpointMethodTypes } from '@octokit/rest'; // Ensure RestEndpointMethodTypes is imported
+import { Octokit, RestEndpointMethodTypes } from '@octokit/rest';
 import fetch from 'node-fetch';
 import * as aiModelService from '../services/ai-model.service';
 
 
 export enum GithubAction {
-  FetchOpenPullRequests = 'fetch_open_pull_requests', // Added for clarity, maps to ListRepositoryPullRequests
-  ListAssignedIssues = 'list_assigned_issues', // Maps to ListRepositoryIssues with assignee filter
-  ListOpenIssues = 'list_open_issues', // Maps to ListRepositoryIssues with state: 'open'
+  FetchOpenPullRequests = 'fetch_open_pull_requests', 
+  ListAssignedIssues = 'list_assigned_issues', 
+  ListOpenIssues = 'list_open_issues', 
   ListUserRepositories = 'list_user_repositories',
-  GetOrgRepositories = 'get_org_repositories', // New explicit action for org repos
+  GetOrgRepositories = 'get_org_repositories', 
 
   ListRepositoryIssues = 'list_repository_issues', // General issues listing
   ListRepositoryPullRequests = 'list_repository_pull_requests', // General PRs listing
@@ -16,7 +16,6 @@ export enum GithubAction {
   GetIssueDetails = 'get_issue_details',
   GetPullRequestDetails = 'get_pull_request_details',
 
-  // Existing write actions
   WriteReadme = 'write_readme',
   CreateIssue = 'create_issue',
 

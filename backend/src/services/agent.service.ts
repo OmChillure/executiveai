@@ -7,7 +7,6 @@ import * as aiModelService from './ai-model.service';
 import * as researchService from '../agents/research.service';
 import { StreamCallback } from './ai-model.service';
 import { makeAgentStreamable } from '../utils/streaming';
-import { processGithubCommand } from '../controller/github.controller';
 
 dotenv.config();
 
@@ -101,9 +100,9 @@ export const validateAgentExists = async (agentId: string): Promise<boolean> => 
 export const analyzeUserIntent = async (message: string): Promise<AgentRoutingResult> => {
   try {
     console.log('Analyzing user intent with LLM for:', message.substring(0, 100) + '...');
-    
+
     const availableAgents = await getAvailableAgents();
-    
+
     if (!availableAgents || availableAgents.length === 0) {
       console.log('No agents available, routing to general AI');
       return {
@@ -138,7 +137,7 @@ ROUTING RULES:
 
 - COMPLEX QUERIES: Require specialized processing or external data
   → Route to appropriate agent(s)
-  → Examples: YouTube links, research requests, handwriting conversion, Google Drive operations
+  → Examples: YouTube links, research requests, handwriting conversion, Google Drive/Docs operations
 
 RESPOND WITH VALID JSON ONLY:
 {
@@ -159,10 +158,10 @@ RESPOND WITH VALID JSON ONLY:
         console.warn('No JSON found in LLM response, defaulting to simple query');
         return createFallbackResult('No valid JSON found in LLM response');
       }
-      
+
       const jsonText = jsonMatch[0];
       const parsedResponse = JSON.parse(jsonText) as AgentRoutingResult;
-      
+
       if (parsedResponse.agentId) {
         const agentExists = await validateAgentExists(parsedResponse.agentId);
         if (!agentExists) {
@@ -170,14 +169,14 @@ RESPOND WITH VALID JSON ONLY:
           return createFallbackResult(`Agent ${parsedResponse.agentId} not found in database`);
         }
       }
-      
+
       console.log('LLM Intent analysis result:', {
         agentId: parsedResponse.agentId,
         confidence: parsedResponse.confidence,
         complexity: parsedResponse.complexity,
         isSimple: parsedResponse.isSimpleQuery
       });
-      
+
       return parsedResponse;
     } catch (parseError) {
       console.error('Error parsing LLM response:', parseError);
@@ -212,6 +211,8 @@ function getAgentUseCase(agentType: string): string {
       return 'Google Forms analysis, form filling, form data extraction';
     case 'gdrive':
       return 'Google Drive operations, file management, search, upload, download, organize files';
+    case 'google_docs':
+      return 'Google Docs operations, create, read, edit, share, search documents';
     case 'github':
       return 'GitHub operations, summarize pull requests, dependency analysis, README.md generation';
     default:
@@ -319,87 +320,41 @@ export const processAgentMessage = async (
 
       case 'gdrive': {
         const gdriveService = await import('../agents/gdrive.service');
-        
-        // Handle Google Drive with proper error handling
-        try {
-          const result = await gdriveService.processGDriveMessage(
-            message,
-            config.modelId,
-            config.userId || 'unknown'
-          );
-          
-          // Check if it's an unknown action or authorization required
-          if (result.type === 'error' && result.content.includes('not implemented')) {
-            return {
-              content: `I understand you want to work with Google Drive. Here are some specific commands you can try:
-
-📁 **File Operations:**
-• "List my Google Drive files"
-• "Show my drive contents" 
-• "Search for documents in my drive"
-• "Find all PDFs in my drive"
-
-🔍 **Search Examples:**
-• "Search for files named 'report'"
-• "Find all images in my drive"
-• "Show files modified today"
-
-📂 **Folder Operations:**
-• "Show contents of folder 'Projects'"
-• "List files in my Documents folder"
-
-Please try one of these specific commands, and I'll help you with your Google Drive!`,
-              type: 'gdrive_help',
-              metadata: {
-                agentUsed: agent.name,
-                availableCommands: [
-                  'list files', 'search files', 'show folder contents',
-                  'find documents', 'search by name', 'search by type'
-                ]
-              }
-            };
-          }
-          
-          // Handle authorization required
-          if (result.type === 'authorization_required') {
-            return {
-              content: result.content,
-              type: result.type,
-              metadata: {
-                ...result.metadata,
-                agentUsed: agent.name
-              }
-            };
-          }
-          
-          return {
-            content: result.content,
-            type: result.type,
-            metadata: {
-              ...result.metadata,
-              agentUsed: agent.name
-            },
-            error: result.error
-          };
-        } catch (error) {
-          return {
-            content: `I'm ready to help with Google Drive operations! Try commands like:
-• "List my Google Drive files"
-• "Search for documents"
-• "Show folder contents"
-• "Find files by name"
-
-What would you like to do with your Google Drive?`,
-            type: 'gdrive_help',
-            metadata: {
-              agentUsed: agent.name,
-              error: (error as Error).message
-            }
-          };
-        }
+        const result = await gdriveService.processGDriveMessage(
+          message,
+          config.modelId,
+          config.userId || 'unknown'
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            ...result.metadata,
+            agentUsed: agent.name
+          },
+          error: result.error
+        };
       }
 
-     case 'github': {
+      case 'googledocs': {
+        const gdocsService = await import('../agents/doc.service');
+        const result = await gdocsService.processGoogleDocsRequest(
+          message,
+          config.modelId,
+          config.userId || 'unknown'
+        );
+        return {
+          content: result.content,
+          type: result.type,
+          metadata: {
+            ...result.metadata,
+            agentUsed: agent.name
+          },
+          error: result.error
+        };
+      }
+
+      case 'github': {
         const githubService = await import('../agents/github.service');
         const result = await githubService.processGithubMessage(
           message,
@@ -416,6 +371,7 @@ What would you like to do with your Google Drive?`,
           error: result.error
         };
       }
+
       default:
         throw new Error(`Unsupported agent type: ${agent.type}`);
     }
@@ -428,7 +384,7 @@ What would you like to do with your Google Drive?`,
   }
 };
 
-// NEW: Streaming agent processing
+// Streaming agent processing
 export const processAgentMessageStream = async (
   message: string,
   config: AgentConfig,
@@ -437,14 +393,14 @@ export const processAgentMessageStream = async (
 ): Promise<AgentResponse> => {
   try {
     console.log(`🌊 Processing agent message with streaming: ${config.agentId}`);
-    
+
     // Use the streaming wrapper to convert any agent response to streaming
     const result = await makeAgentStreamable(
       () => processAgentMessage(message, config),
       onChunk,
       streamingSpeed
     );
-    
+
     return result;
   } catch (error) {
     console.error('Error processing streaming agent message:', error);
@@ -470,15 +426,15 @@ export const executeAgentChain = async (
     if (!agentIds.length) {
       throw new Error('No agents specified for chain execution');
     }
-    
+
     console.log(`Executing agent chain with ${agentIds.length} agents`);
-    
+
     const intermediateResults: Record<string, any> = {};
     let currentInput = message;
-    
+
     for (const agentId of agentIds) {
       console.log(`Executing agent ${agentId}`);
-      
+
       const result = await processAgentMessage(
         currentInput,
         {
@@ -487,7 +443,7 @@ export const executeAgentChain = async (
           userId,
         }
       );
-      
+
       intermediateResults[agentId] = result;
 
       if (result.error) {
@@ -497,20 +453,20 @@ export const executeAgentChain = async (
         currentInput = `Previous result: ${result.content}\n\nOriginal request: ${message}`;
       }
     }
-  
+
     const summaryPrompt = `
 Combine these agent results into a comprehensive response for: "${message}"
 
 Results:
-${Object.entries(intermediateResults).map(([agentId, result]) => 
-  `${agentId}: ${result.content}`
-).join('\n\n')}
+${Object.entries(intermediateResults).map(([agentId, result]) =>
+      `${agentId}: ${result.content}`
+    ).join('\n\n')}
 
 Provide a well-structured, comprehensive response that addresses the user's request.
 `;
 
     const summaryResponse = await aiModelService.generateAIResponse(modelId, summaryPrompt);
-    
+
     return {
       content: summaryResponse.content,
       intermediateResults
@@ -536,14 +492,14 @@ export const determineResponseStrategy = async (
 }> => {
   try {
     const intentAnalysis = await analyzeUserIntent(message);
-    
+
     if (intentAnalysis.isSimpleQuery || intentAnalysis.confidence < 70) {
       return {
         strategy: 'simple',
         reasoning: `Simple query detected: ${intentAnalysis.reasoning}`
       };
     }
-    
+
     if (intentAnalysis.chainOfAgents && intentAnalysis.chainOfAgents.length > 1) {
       return {
         strategy: 'agent_chain',
@@ -551,7 +507,7 @@ export const determineResponseStrategy = async (
         reasoning: `Multi-agent chain needed: ${intentAnalysis.reasoning}`
       };
     }
-    
+
     if (intentAnalysis.agentId && intentAnalysis.confidence >= 70) {
       return {
         strategy: 'single_agent',
@@ -559,12 +515,12 @@ export const determineResponseStrategy = async (
         reasoning: `Single agent selected: ${intentAnalysis.reasoning}`
       };
     }
-    
+
     return {
       strategy: 'simple',
       reasoning: 'Falling back to general AI due to low confidence or no suitable agent'
     };
-    
+
   } catch (error) {
     console.error('Error determining response strategy:', error);
     return {

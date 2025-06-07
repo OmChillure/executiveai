@@ -35,13 +35,11 @@ export const getModelById = async (modelId: string) => {
   }
 };
 
-// Interface for message context
 export interface MessageContext {
   role: 'user' | 'ai' | 'system';
   content: string;
 }
 
-// Interface for streaming response
 export interface StreamingResponse {
   content: string;
   model: string;
@@ -53,20 +51,19 @@ export interface StreamingResponse {
   };
 }
 
-// Callback type for streaming chunks
 export type StreamCallback = (chunk: string, isComplete?: boolean) => void;
 
 // Streaming configuration
 export interface StreamingConfig {
-  characterDelay: number; // Delay between characters in milliseconds
-  wordPause: number; // Extra pause after words
-  sentencePause: number; // Extra pause after sentences
+  characterDelay: number; 
+  wordPause: number; 
+  sentencePause: number; 
 }
 
 const DEFAULT_STREAMING_CONFIG: StreamingConfig = {
-  characterDelay: 30, // 30ms between characters
-  wordPause: 10, // 10ms extra after spaces
-  sentencePause: 100, // 100ms extra after sentences
+  characterDelay: 30,
+  wordPause: 8,
+  sentencePause: 100,
 };
 
 // Helper function to add smart delays
@@ -86,9 +83,6 @@ const addSmartDelay = async (char: string, config: StreamingConfig = DEFAULT_STR
   await new Promise(resolve => setTimeout(resolve, delay));
 };
 
-/**
- * Get the last N messages from a chat session for context
- */
 export const getChatHistory = async (
   sessionId: string,
   limit: number = 15
@@ -111,9 +105,6 @@ export const getChatHistory = async (
   }
 };
 
-/**
- * Generate AI response (non-streaming)
- */
 export const generateAIResponse = async (
   modelId: string, 
   prompt: string,
@@ -145,9 +136,6 @@ export const generateAIResponse = async (
   }
 };
 
-/**
- * Generate AI response with streaming (NEW)
- */
 export const generateAIResponseStream = async (
   modelId: string,
   prompt: string,
@@ -183,7 +171,6 @@ export const generateAIResponseStream = async (
   }
 };
 
-// Non-streaming Google response (existing)
 const generateGoogleResponse = async (
   modelId: string, 
   prompt: string,
@@ -231,7 +218,6 @@ const generateGoogleResponse = async (
   }
 };
 
-// Streaming Google response with character-by-character streaming
 const generateGoogleResponseStream = async (
   modelId: string,
   prompt: string,
@@ -306,7 +292,6 @@ const generateGoogleResponseStream = async (
   }
 };
 
-// Non-streaming Perplexity response (existing)
 const generatePerplexityResponse = async (
   modelId: string, 
   prompt: string,
@@ -390,7 +375,6 @@ const generatePerplexityResponse = async (
   }
 };
 
-// Streaming Perplexity response with character-by-character streaming
 const generatePerplexityResponseStream = async (
   modelId: string,
   prompt: string,

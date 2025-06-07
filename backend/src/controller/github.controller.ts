@@ -1,9 +1,5 @@
-// src/controller/github.controller.ts
-
 import { Request, Response, NextFunction, RequestHandler } from 'express';
-// Assuming AppError is defined as an interface/type in error.middleware.ts,
-// we'll use the pattern of casting a new Error() to AppError.
-import { AppError } from '../middleware/error.middleware'; // Import the type for casting
+import { AppError } from '../middleware/error.middleware';
 import * as githubService from '../agents/github.service';
 import * as chatService from '../services/chat.service';
 
