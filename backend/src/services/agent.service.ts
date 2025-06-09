@@ -338,7 +338,7 @@ export const processAgentMessage = async (
         };
       }
 
-      case 'google_docs': {
+      case 'googledocs': {
         const gdocsService = await import('../agents/doc.service');
         const result = await gdocsService.processGoogleDocsRequest(
           message,
@@ -374,23 +374,6 @@ export const processAgentMessage = async (
         };
       }
 
-      case 'github': {
-        const githubService = await import('../agents/github.service');
-        const result = await githubService.processGithubMessage(
-          message,
-          config.modelId,
-          config.userId || 'unknown'
-        );
-        return {
-          content: result.content,
-          type: result.type,
-          metadata: {
-            ...result.metadata,
-            agentUsed: agent.name
-          },
-          error: result.error
-        };
-      }
 
       default:
         throw new Error(`Unsupported agent type: ${agent.type}`);
