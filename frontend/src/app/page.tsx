@@ -1,14 +1,26 @@
 import React from "react";
 import HeroSection from "@/components/hero-section";
 import { HeroHeader } from "@/components/hero5-header";
+import FAQsThree from "@/components/faqs";
+import FooterSection from "@/components/footer";
+import Features from "@/components/features";
+import PricingPage from "@/components/pricing";
+import TestimonialsSection from "@/components/testimonials";
 
 const Index: React.FC = () => {
   return (
-    <main className="min-h-screen bg-[rgba(8,8,8,1)]">
+    <main className="bg-black">
       <HeroHeader />
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-center mb-16">
+      <div className="container">
+        <div className="flex flex-col justify-center">
+          <div className="py-8">
           <HeroSection />
+          </div>
+          <Features />
+          <PricingPage/>
+          <TestimonialsSection />
+          <FAQsThree />
+          <FooterSection />
         </div>
       </div>
 

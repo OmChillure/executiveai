@@ -140,7 +140,7 @@ export const HeroHeader = () => {
                   aria-label="home"
                   className="flex items-center space-x-2"
                 >
-                  Onara
+                  OnaraAI
                 </Link>
 
                 <button
