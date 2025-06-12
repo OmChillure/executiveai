@@ -134,7 +134,7 @@ export const sendMessage = async (
 
     // Regular non-streaming response
     let session = await chatService.getSession(sessionId);
-    
+
     if (!session) {
       try {
         console.log('Creating new session for ID:', sessionId);
@@ -186,23 +186,18 @@ export const sendMessageStream = async (
     }
 
     // Setup SSE headers
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': 'Cache-Control, Authorization, Content-Type',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    });
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
     res.write('data: {"type": "connected"}\n\n');
 
     let session = await chatService.getSession(sessionId);
-    
+
     if (!session) {
       session = { ...(await chatService.createSession(userId, sessionId, content.slice(0, 30))), messages: [] };
     }
 
-    res.write(`data: ${JSON.stringify({ 
+    res.write(`data: ${JSON.stringify({
       type: 'status',
       message: 'Processing your request...'
     })}\n\n`);
@@ -210,13 +205,13 @@ export const sendMessageStream = async (
     const onChunk = (chunk: string, isComplete: boolean = false) => {
       try {
         if (isComplete) {
-          res.write(`data: ${JSON.stringify({ 
+          res.write(`data: ${JSON.stringify({
             type: 'response_complete',
             chunk: '',
             complete: true
           })}\n\n`);
         } else {
-          res.write(`data: ${JSON.stringify({ 
+          res.write(`data: ${JSON.stringify({
             type: 'response_chunk',
             chunk,
             complete: false
@@ -236,7 +231,7 @@ export const sendMessageStream = async (
         onChunk
       );
 
-      res.write(`data: ${JSON.stringify({ 
+      res.write(`data: ${JSON.stringify({
         type: 'final_response',
         userMessage: aiResponse.userMessage,
         aiResponse: aiResponse.message,
@@ -247,7 +242,7 @@ export const sendMessageStream = async (
       res.end();
     } catch (error) {
       console.error('Error in streaming AI response generation:', error);
-      res.write(`data: ${JSON.stringify({ 
+      res.write(`data: ${JSON.stringify({
         type: 'error',
         error: (error as Error).message
       })}\n\n`);
@@ -255,12 +250,12 @@ export const sendMessageStream = async (
     }
   } catch (error) {
     console.error('Error in sendMessageStream:', error);
-    
+
     if (!res.headersSent) {
       next(error);
     } else {
       try {
-        res.write(`data: ${JSON.stringify({ 
+        res.write(`data: ${JSON.stringify({
           type: 'error',
           error: (error as Error).message
         })}\n\n`);
@@ -335,7 +330,7 @@ export const sendMessageWithThinking = async (
     res.write('data: {"type": "connected"}\n\n');
 
     let session = await chatService.getSession(sessionId);
-    
+
     if (!session) {
       session = { ...(await chatService.createSession(userId, sessionId, content.slice(0, 30))), messages: [] };
     }
@@ -358,7 +353,7 @@ export const sendMessageWithThinking = async (
       );
 
       // Send final response
-      res.write(`data: ${JSON.stringify({ 
+      res.write(`data: ${JSON.stringify({
         type: 'final_response',
         userMessage: aiResponse.userMessage,
         aiResponse: aiResponse.message,
@@ -369,7 +364,7 @@ export const sendMessageWithThinking = async (
       res.end();
     } catch (error) {
       console.error('Error in AI response generation:', error);
-      res.write(`data: ${JSON.stringify({ 
+      res.write(`data: ${JSON.stringify({
         type: 'error',
         error: (error as Error).message
       })}\n\n`);
@@ -377,7 +372,7 @@ export const sendMessageWithThinking = async (
     }
   } catch (error) {
     console.error('Error in sendMessageWithThinking:', error);
-    
+
     if (!res.headersSent) {
       next(error);
     } else {

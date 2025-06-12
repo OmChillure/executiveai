@@ -122,7 +122,7 @@ const links = [
 export default function FooterSection() {
     return (
         <div className="bg-transparent text-white bg-[linear-gradient(to_bottom,_#000000,_#5a1f1f_40%,_#d14b1e_70%,_#ff8650_90%)] py-[72px] sm:py-24 relative overflow-clip animate-footer-appear">
-            <div className="absolute h-[375px] w-[750px] sm:w-[1536px] sm:h-[768px] lg:w-[2400px] llg:h-[800px] bg-transparent rounded-[100%]  left-1/2 -translate-x-1/2 border border-[#b95834] bg-[radial-gradient(closest-side,_#100707_80%,_#e06d3b)] top-[calc(100%-96px)] sm:top-[calc(100%-120px)] animate-radial-glow"></div>
+            {/* <div className="absolute h-[375px] w-[750px] sm:w-[1536px] sm:h-[768px] lg:w-[2400px] llg:h-[800px] bg-transparent rounded-[100%]  left-1/2 -translate-x-1/2 border border-[#b95834] bg-[radial-gradient(closest-side,_#100707_80%,_#e06d3b)] top-[calc(100%-96px)] sm:top-[calc(100%-120px)] animate-radial-glow"></div> */}
             <div className="container relative mx-auto max-w-7xl px-6">
                 <div className="grid gap-12 md:grid-cols-5">
                     <div className="md:col-span-2 flex flex-col">

@@ -6,6 +6,7 @@ import FooterSection from "@/components/footer";
 import Features from "@/components/features";
 import PricingPage from "@/components/pricing";
 import TestimonialsSection from "@/components/testimonials";
+import { ProblemCard } from "@/components/problems";
 
 const Index: React.FC = () => {
   return (
@@ -16,6 +17,7 @@ const Index: React.FC = () => {
           <div className="py-8">
           <HeroSection />
           </div>
+          <ProblemCard />
           <Features />
           <PricingPage/>
           <TestimonialsSection />
