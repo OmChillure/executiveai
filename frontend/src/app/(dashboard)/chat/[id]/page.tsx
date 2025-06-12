@@ -532,7 +532,7 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
             body: JSON.stringify({
               content: messageContent,
               aiModelId: modelId,
-              streamingSpeed: streamingSpeed, // Send the speed setting
+              streamingSpeed: streamingSpeed,
             }),
           })
 

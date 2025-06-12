@@ -20,7 +20,8 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
-    'https://onaraai.xyz/',
+    'https://onaraai.xyz',
+    'https://executiveai-dun.vercel.app',
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: [
@@ -48,21 +49,6 @@ app.use(cors({
   maxAge: 86400
 }));
 
-app.options('/api/chat/:id/stream', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Accept');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.status(204).send();
-});
-
-app.options('/api/chat/:id/tools', (req, res) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cache-Control, Accept');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.status(204).send();
-});
 
 app.use(express.json({
   limit: '50mb'
