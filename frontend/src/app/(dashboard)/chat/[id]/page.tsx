@@ -11,6 +11,7 @@ import { Navbar } from "@/components/dashboardNav"
 import { useThinkingProcess } from "@/hooks/useToolRenderer"
 import { v4 as uuidv4 } from "uuid"
 import { use } from "react"
+import { flushSync } from 'react-dom';
 
 // File icon component
 const FileIcon = ({ type, mimeType }: { type: string; mimeType: string }) => {
@@ -172,12 +173,12 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
   const [lastMessageId, setLastMessageId] = useState<string | null>(null)
   const [pollingRef, setPollingRef] = useState<NodeJS.Timeout | null>(null)
   const [messageBeforeAI, setMessageBeforeAI] = useState<Message | null>(null)
-  
+
   // UI state
   const [isOpen, setIsOpen] = useState(true)
   const [activeTab, setActiveTab] = useState("chat")
   const [isInitialized, setIsInitialized] = useState(false)
-  
+
   // AI models and agents
   const [aiModels, setAiModels] = useState<AIModel[]>([])
   const [aiAgents, setAiAgents] = useState<AIAgent[]>([])
@@ -590,13 +591,14 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
                         } else if (parsedData.type === "status") {
                           console.log("Status:", parsedData.message)
                         } else if (parsedData.type === "response_chunk") {
-                          // Add chunks to streaming content
-                          setStreamingContent(prev => prev + parsedData.chunk)
+                          if (parsedData.type === "response_chunk") {
+                            flushSync(() => {
+                              setStreamingContent(prev => prev + parsedData.chunk);
+                            });
+                          }
                         } else if (parsedData.type === "response_complete") {
-                          // Streaming is complete, waiting for final response
                           console.log("Streaming complete")
                         } else if (parsedData.type === "final_response") {
-                          // Save the complete message to chat
                           if (currentChat && parsedData.aiResponse) {
                             setCurrentChat((prev) => {
                               if (!prev) return null
@@ -794,7 +796,7 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
       const token = session?.user?.token || localStorage.getItem("token")
 
       let actualChatId = chatId
-      
+
       // Create new chat if needed
       if (!currentChat || chatNotFound) {
         actualChatId = uuidv4()
@@ -917,7 +919,7 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
             hideThinking()
           }, 1000)
         }
-        
+
         setWaitingForAiResponse(false)
         setMessageBeforeAI(null)
         setIsStreaming(false)
@@ -927,7 +929,7 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
     } catch (error) {
       console.error("Error in handleSubmit:", error)
       toast.error("Failed to send message: " + (error instanceof Error ? error.message : "Unknown error"))
-      
+
       // Clean up all states
       setWaitingForAiResponse(false)
       setSendingMessage(false)
@@ -1054,7 +1056,7 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
 
       <main className={cn("flex-1 flex flex-col h-full transition-all duration-300", isOpen ? "ml-64" : "ml-0")}>
         <Navbar isOpen={isOpen} setIsOpen={setIsOpen} className={cn(isOpen ? "left-[17.2rem]" : "left-1")} />
-        
+
         <div className="flex-1 overflow-y-auto p-4 chat-scrollbar">
           {loadingChat ? (
             <div className="max-w-3xl mx-auto space-y-6">
@@ -1143,25 +1145,25 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
                       </div>
                     )
                   })}
-                  
+
                   {isStreaming && streamingContent && (
                     <div className="rounded-lg">
-                      <StreamingMessage 
-                        content={streamingContent} 
+                      <StreamingMessage
+                        content={streamingContent}
                         isComplete={false}
                       />
                     </div>
                   )}
-                  
+
                   {waitingForAiResponse && showThinkingProcess && !isStreaming && (
                     <div className="rounded-lg">
-                      <ThinkingProcess 
-                        steps={thinkingSteps} 
+                      <ThinkingProcess
+                        steps={thinkingSteps}
                         isVisible={showThinkingProcess}
                       />
                     </div>
                   )}
-                  
+
                   {waitingForAiResponse && !isStreaming && !showThinkingProcess && (
                     <div className="flex items-start">
                       <div className="flex-shrink-0 mr-3">
@@ -1202,7 +1204,7 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
             </div>
           )}
         </div>
-        
+
         <div className="mx-auto w-full max-w-4xl px-4">
           <AiInput
             onSubmit={handleSubmit}
@@ -1214,7 +1216,7 @@ export default function ChatIdPage({ params }: { params: { id: string } }) {
           />
         </div>
       </main>
-      
+
       <style jsx>{`
         .chat-scrollbar::-webkit-scrollbar {
           width: 6px;
